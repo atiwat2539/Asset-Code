@@ -14,6 +14,11 @@ fi
 echo "📦 2. บันทึก Commit: $COMMIT_MSG"
 git commit -m "$COMMIT_MSG"
 
+if [ -f "scripts/sync-supabase.mjs" ]; then
+  echo "🗄️ 2.5 อัปเดตโครงสร้างฐานข้อมูลเข้า Supabase อัตโนมัติ..."
+  node scripts/sync-supabase.mjs
+fi
+
 if ! git remote get-url origin >/dev/null 2>&1; then
   echo "⚠️ ยังไม่ได้ผูก GitHub Remote URL (origin) กรุณารัน: git remote add origin <GITHUB_REPO_URL>"
   exit 0
