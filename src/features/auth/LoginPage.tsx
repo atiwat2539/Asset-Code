@@ -342,39 +342,39 @@ export function LoginPage() {
   };
 
   return (
-    <div className="relative min-h-screen flex flex-col justify-between overflow-hidden bg-gradient-to-br from-[#F4F1FA] via-[#EDEAF7] to-[#F7F3EE] text-slate-900">
-      {/* เลเยอร์แสงสีพาสเทล PANTONE แบบจางและนุ่มนวล */}
-      <div className="pointer-events-none absolute -top-28 -left-24 h-96 w-96 rounded-full bg-[#C1B7E4]/40 blur-3xl" />
-      <div className="pointer-events-none absolute top-1/3 -right-24 h-96 w-96 rounded-full bg-[#FFBE98]/35 blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-28 left-1/3 h-96 w-96 rounded-full bg-[#92A8D1]/35 blur-3xl" />
+    <div className="relative min-h-screen flex flex-col justify-between overflow-hidden bg-gradient-to-br from-[#2B1F47] via-[#3E305E] to-[#4E3D76] text-slate-900">
+      {/* เลเยอร์แสงสี PANTONE บนพื้นหลังสีม่วงเข้ม (Ultra Violet / Very Peri / Peach Fuzz) */}
+      <div className="pointer-events-none absolute -top-28 -left-24 h-96 w-96 rounded-full bg-[#6667AB]/45 blur-3xl" />
+      <div className="pointer-events-none absolute top-1/3 -right-24 h-96 w-96 rounded-full bg-[#FFBE98]/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-28 left-1/3 h-96 w-96 rounded-full bg-[#8B7BC0]/35 blur-3xl" />
 
       {/* เลเยอร์พื้นผิวแบบ Grain (Fine Film/Paper Noise Texture) */}
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.28] mix-blend-multiply"
+        className="pointer-events-none absolute inset-0 opacity-[0.22] mix-blend-overlay"
         style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grainFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grainFilter)' opacity='0.55'/%3E%3C/svg%3E")`,
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grainFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grainFilter)' opacity='0.6'/%3E%3C/svg%3E")`,
         }}
       />
 
       {/* แถบแจ้งสถานะด้านบน */}
-      <div className="relative z-10 w-full border-b border-[#DCD6F0]/80 bg-white/65 backdrop-blur-md px-4 py-2.5 text-xs text-slate-700 shadow-2xs">
+      <div className="relative z-10 w-full border-b border-white/10 bg-[#23193B]/65 backdrop-blur-md px-4 py-2.5 text-xs text-[#EDEAF7] shadow-2xs">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-gov-700" />
-            <span className="font-medium text-gov-900">ระบบสารสนเทศเพื่อการบริหารจัดการครุภัณฑ์สำนักงาน</span>
+            <Building2 className="h-4 w-4 text-[#FFBE98]" />
+            <span className="font-medium text-white/95">ระบบสารสนเทศเพื่อการบริหารจัดการครุภัณฑ์สำนักงาน</span>
           </div>
           <div className="flex items-center gap-3">
             {configured ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E2F1EA] px-2.5 py-0.5 text-[#3E7A5D] border border-[#C3E0D2] font-medium">
-                <CheckCircle2 className="h-3.5 w-3.5" /> เชื่อมต่อ Supabase พร้อมใช้งาน
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#88B04B]/20 px-2.5 py-0.5 text-[#D8EEB9] border border-[#88B04B]/40 font-medium">
+                <CheckCircle2 className="h-3.5 w-3.5 text-[#A9D16B]" /> เชื่อมต่อ Supabase พร้อมใช้งาน
               </span>
             ) : (
               <button
                 type="button"
                 onClick={() => setOpenSetupModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-amber-800 border border-amber-300 hover:bg-amber-200/70"
+                className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/20 px-3 py-1 text-amber-200 border border-amber-400/40 hover:bg-amber-400/30"
               >
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-300" />
                 ยังไม่ได้ตั้งค่า Supabase — คลิกดูวิธีตั้งค่า
               </button>
             )}
@@ -382,11 +382,11 @@ export function LoginPage() {
         </div>
       </div>
 
-      {/* กล่องหลัก */}
+      {/* กล่องหลัก (Modal โทนสีอ่อน PANTONE) */}
       <div className="relative z-10 flex flex-1 items-center justify-center p-4 sm:p-6">
-        <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white/90 backdrop-blur-md shadow-xl shadow-[#6667AB]/10 border border-[#DCD6F0]">
-          <div className="bg-gradient-to-br from-[#EDEAF7] via-[#F4F1FA] to-[#FBF5F0] border-b border-[#DCD6F0]/70 px-6 py-6 text-center text-gov-900">
-            <div className="mx-auto inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 shadow-md shadow-[#6667AB]/10 ring-1 ring-[#DCD6F0] transition-transform duration-300 hover:scale-105">
+        <div className="w-full max-w-md overflow-hidden rounded-2xl bg-gradient-to-b from-[#FAF8FE] via-[#F6F3FC] to-[#FCF9F6] backdrop-blur-md shadow-2xl shadow-[#18102B]/50 border border-[#E5DFF5] ring-1 ring-white/60">
+          <div className="bg-gradient-to-br from-[#EAE3F7] via-[#F2EEF9] to-[#F9F0EA] border-b border-[#DFD8F2] px-6 py-6 text-center text-gov-900">
+            <div className="mx-auto inline-flex items-center justify-center rounded-2xl bg-[#FDFCFE] px-5 py-3 shadow-md shadow-[#5F4B8B]/10 ring-1 ring-[#DFD8F2] transition-transform duration-300 hover:scale-105">
               <img
                 src="/cmu-library-logo.png"
                 alt="CMU Library Logo"
@@ -403,14 +403,14 @@ export function LoginPage() {
 
           {/* แท็บสลับ เข้าสู่ระบบ / สร้างบัญชีผู้ใช้ใหม่ */}
           {(mode === 'login' || mode === 'register') && (
-            <div className="grid grid-cols-2 border-b border-slate-200 bg-slate-50 p-1.5 gap-1.5">
+            <div className="grid grid-cols-2 border-b border-[#E5DFF5] bg-[#EEE9F9]/80 p-1.5 gap-1.5">
               <button
                 type="button"
                 onClick={() => switchMode('login')}
                 className={`flex items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition ${
                   mode === 'login'
-                    ? 'bg-white text-gov-800 shadow-xs ring-1 ring-slate-200'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#FDFCFE] text-[#4E3D76] shadow-xs ring-1 ring-[#DCD6F0]'
+                    : 'text-[#6667AB] hover:text-[#3E305E]'
                 }`}
               >
                 <LogIn className="h-4 w-4" />
@@ -421,8 +421,8 @@ export function LoginPage() {
                 onClick={() => switchMode('register')}
                 className={`flex items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition ${
                   mode === 'register'
-                    ? 'bg-white text-gov-800 shadow-xs ring-1 ring-slate-200'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-[#FDFCFE] text-[#4E3D76] shadow-xs ring-1 ring-[#DCD6F0]'
+                    : 'text-[#6667AB] hover:text-[#3E305E]'
                 }`}
               >
                 <UserPlus className="h-4 w-4" />
@@ -484,7 +484,7 @@ export function LoginPage() {
                       autoComplete="email"
                       placeholder="name@agency.go.th"
                       {...loginForm.register('email')}
-                      className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
+                      className="w-full rounded-lg border border-[#DCD6F0] bg-[#FDFCFE] py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
                     />
                   </div>
                   {loginForm.formState.errors.email && (
@@ -518,7 +518,7 @@ export function LoginPage() {
                       autoComplete="current-password"
                       placeholder="••••••••"
                       {...loginForm.register('password')}
-                      className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
+                      className="w-full rounded-lg border border-[#DCD6F0] bg-[#FDFCFE] py-2 pl-9 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
                     />
                     <button
                       type="button"
@@ -593,7 +593,7 @@ export function LoginPage() {
                       type="text"
                       placeholder="เช่น นายสมชาย ใจดี"
                       {...registerForm.register('fullName')}
-                      className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
+                      className="w-full rounded-lg border border-[#DCD6F0] bg-[#FDFCFE] py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
                     />
                   </div>
                   {registerForm.formState.errors.fullName && (
@@ -614,7 +614,7 @@ export function LoginPage() {
                       type="text"
                       placeholder="เช่น นักวิชาการพัสดุปฏิบัติการ"
                       {...registerForm.register('position')}
-                      className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
+                      className="w-full rounded-lg border border-[#DCD6F0] bg-[#FDFCFE] py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
                     />
                   </div>
                 </div>
@@ -631,7 +631,7 @@ export function LoginPage() {
                       autoComplete="email"
                       placeholder="name@agency.go.th"
                       {...registerForm.register('email')}
-                      className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
+                      className="w-full rounded-lg border border-[#DCD6F0] bg-[#FDFCFE] py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
                     />
                   </div>
                   {registerForm.formState.errors.email && (
@@ -657,7 +657,7 @@ export function LoginPage() {
                         autoComplete="new-password"
                         placeholder="อย่างน้อย 6 ตัว"
                         {...registerForm.register('password')}
-                        className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-8 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
+                        className="w-full rounded-lg border border-[#DCD6F0] bg-[#FDFCFE] py-2 pl-9 pr-8 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
                       />
                       <button
                         type="button"
@@ -693,7 +693,7 @@ export function LoginPage() {
                         autoComplete="new-password"
                         placeholder="กรอกซ้ำอีกครั้ง"
                         {...registerForm.register('confirmPassword')}
-                        className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-8 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
+                        className="w-full rounded-lg border border-[#DCD6F0] bg-[#FDFCFE] py-2 pl-9 pr-8 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
                       />
                       <button
                         type="button"
@@ -715,9 +715,9 @@ export function LoginPage() {
                   </div>
                 </div>
 
-                <div className="rounded-lg bg-slate-50 p-2.5 text-[11px] text-slate-600 border border-slate-200">
+                <div className="rounded-lg bg-[#EFEBF8]/70 p-2.5 text-[11px] text-[#4E3D76] border border-[#DCD6F0]">
                   บัญชีที่สร้างใหม่จะได้รับสิทธิ์เริ่มต้นเป็น{' '}
-                  <span className="font-semibold text-slate-800">บุคลากรทั่วไป (Requester)</span>{' '}
+                  <span className="font-semibold text-[#3E305E]">บุคลากรทั่วไป (Requester)</span>{' '}
                   โดยอัตโนมัติตามนโยบายความปลอดภัย และผู้ดูแลระบบสามารถยกระดับสิทธิ์ภายหลังได้
                 </div>
 
@@ -783,7 +783,7 @@ export function LoginPage() {
                         autoComplete="email"
                         placeholder="name@agency.go.th"
                         {...forgotForm.register('email')}
-                        className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
+                        className="w-full rounded-lg border border-[#DCD6F0] bg-[#FDFCFE] py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
                       />
                     </div>
                     {forgotForm.formState.errors.email && (
@@ -841,7 +841,7 @@ export function LoginPage() {
                         autoComplete="new-password"
                         placeholder="••••••••"
                         {...updatePasswordForm.register('password')}
-                        className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
+                        className="w-full rounded-lg border border-[#DCD6F0] bg-[#FDFCFE] py-2 pl-9 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
                       />
                       <button
                         type="button"
@@ -873,7 +873,7 @@ export function LoginPage() {
                         autoComplete="new-password"
                         placeholder="••••••••"
                         {...updatePasswordForm.register('confirmPassword')}
-                        className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
+                        className="w-full rounded-lg border border-[#DCD6F0] bg-[#FDFCFE] py-2 pl-9 pr-10 text-sm text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none focus:ring-2 focus:ring-gov-600/20"
                       />
                       <button
                         type="button"
@@ -912,14 +912,14 @@ export function LoginPage() {
               </div>
             )}
 
-            <div className="mt-6 border-t border-slate-100 pt-4 text-center text-xs text-slate-500 space-y-1">
+            <div className="mt-6 border-t border-[#E5DFF5] pt-4 text-center text-xs text-[#6667AB] space-y-1">
               <p>การกำหนดสิทธิ์ผู้ใช้งานควบคุมโดยผู้ดูแลระบบ (Admin) และบังคับใช้ผ่าน Supabase RLS</p>
             </div>
           </div>
         </div>
       </div>
 
-      <footer className="relative z-10 py-4 text-center text-xs text-slate-500">
+      <footer className="relative z-10 py-4 text-center text-xs text-[#DCD6F0]/80">
         สำนักหอสมุด มหาวิทยาลัยเชียงใหม่ &bull; ระบบสารสนเทศเพื่อการบริหารจัดการครุภัณฑ์สำนักงาน
       </footer>
 
