@@ -26,7 +26,7 @@ import { ROLE_LABELS, translateSupabaseError } from '@/lib/utils';
 import { useDepartments, useLocations, useProfiles } from '@/hooks/useMasterData';
 import { useAuth } from '@/features/auth/AuthContext';
 import { LoadingState, Modal, PageHeader, StatusBadge } from '@/components/ui/common';
-import type { Profile, UserRole } from '@/types/database';
+import type { Department, Location, Profile, UserRole } from '@/types/database';
 
 export function UsersAndDepartmentsPage() {
   const queryClient = useQueryClient();
@@ -38,6 +38,8 @@ export function UsersAndDepartmentsPage() {
   const [activeTab, setActiveTab] = useState<'users' | 'departments' | 'locations'>('users');
   const [userSearch, setUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [deptSearch, setDeptSearch] = useState('');
+  const [locSearch, setLocSearch] = useState('');
 
   // Edit User State (แก้ไขข้อมูลและบทบาทผู้ใช้งาน)
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
@@ -71,6 +73,18 @@ export function UsersAndDepartmentsPage() {
   const [deptPhone, setDeptPhone] = useState('');
   const [isSavingDept, setIsSavingDept] = useState(false);
 
+  // Edit Department State (แก้ไขหน่วยงาน)
+  const [editingDept, setEditingDept] = useState<Department | null>(null);
+  const [editDeptCode, setEditDeptCode] = useState('');
+  const [editDeptName, setEditDeptName] = useState('');
+  const [editDeptPhone, setEditDeptPhone] = useState('');
+  const [editDeptActive, setEditDeptActive] = useState(true);
+  const [isUpdatingDept, setIsUpdatingDept] = useState(false);
+
+  // Delete Department State (ลบหน่วยงาน)
+  const [deletingDept, setDeletingDept] = useState<Department | null>(null);
+  const [isDeletingDept, setIsDeletingDept] = useState(false);
+
   // Create Location State
   const [isLocModalOpen, setIsLocModalOpen] = useState(false);
   const [locCode, setLocCode] = useState('');
@@ -78,8 +92,25 @@ export function UsersAndDepartmentsPage() {
   const [locFloor, setLocFloor] = useState('');
   const [locRoom, setLocRoom] = useState('');
   const [locName, setLocName] = useState('');
+  const [locDescription, setLocDescription] = useState('');
   const [locDeptId, setLocDeptId] = useState('');
   const [isSavingLoc, setIsSavingLoc] = useState(false);
+
+  // Edit Location State (แก้ไขอาคาร/สถานที่)
+  const [editingLoc, setEditingLoc] = useState<Location | null>(null);
+  const [editLocCode, setEditLocCode] = useState('');
+  const [editLocBuilding, setEditLocBuilding] = useState('');
+  const [editLocFloor, setEditLocFloor] = useState('');
+  const [editLocRoom, setEditLocRoom] = useState('');
+  const [editLocName, setEditLocName] = useState('');
+  const [editLocDescription, setEditLocDescription] = useState('');
+  const [editLocDeptId, setEditLocDeptId] = useState('');
+  const [editLocActive, setEditLocActive] = useState(true);
+  const [isUpdatingLoc, setIsUpdatingLoc] = useState(false);
+
+  // Delete Location State (ลบอาคาร/สถานที่)
+  const [deletingLoc, setDeletingLoc] = useState<Location | null>(null);
+  const [isDeletingLoc, setIsDeletingLoc] = useState(false);
 
   const filteredProfiles = useMemo(() => {
     return profiles.filter((p) => {
@@ -95,6 +126,31 @@ export function UsersAndDepartmentsPage() {
     });
   }, [profiles, userSearch, roleFilter]);
 
+  const filteredDepartments = useMemo(() => {
+    const q = deptSearch.trim().toLowerCase();
+    if (!q) return departments;
+    return departments.filter(
+      (d) =>
+        d.code.toLowerCase().includes(q) ||
+        d.name.toLowerCase().includes(q) ||
+        (d.phone || '').toLowerCase().includes(q)
+    );
+  }, [departments, deptSearch]);
+
+  const filteredLocations = useMemo(() => {
+    const q = locSearch.trim().toLowerCase();
+    if (!q) return locations;
+    return locations.filter(
+      (loc) =>
+        loc.code.toLowerCase().includes(q) ||
+        loc.building.toLowerCase().includes(q) ||
+        loc.name.toLowerCase().includes(q) ||
+        (loc.room || '').toLowerCase().includes(q) ||
+        (loc.department?.name || '').toLowerCase().includes(q)
+    );
+  }, [locations, locSearch]);
+
+  // --- ฟังก์ชันจัดการผู้ใช้งาน ---
   const openEditUser = (p: Profile) => {
     setEditingProfile(p);
     setEditFullName(p.full_name || '');
@@ -121,7 +177,6 @@ export function UsersAndDepartmentsPage() {
       const cleanPosition = positionText.trim() || null;
       const cleanDeptId = selectedDeptId || null;
 
-      // 1. อัปเดตข้อมูลโปรไฟล์ทั้งหมดผ่านตาราง profiles (ภายใต้ RLS Policy ของ Admin)
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
@@ -135,7 +190,6 @@ export function UsersAndDepartmentsPage() {
         .eq('id', editingProfile.id);
 
       if (updateError) {
-        // Fallback เรียกใช้ RPC admin_update_user_role
         const { error: rpcError } = await supabase.rpc('admin_update_user_role', {
           p_target_user_id: editingProfile.id,
           p_new_role: selectedRole,
@@ -196,13 +250,11 @@ export function UsersAndDepartmentsPage() {
     try {
       assertSupabaseConfigured();
 
-      // 1. ลองเรียก RPC admin_delete_user (ลบทั้ง profiles และ auth.users)
       const { error: rpcError } = await supabase.rpc('admin_delete_user', {
         p_target_user_id: deletingProfile.id,
       });
 
       if (rpcError) {
-        // 2. Fallback ลบจากตาราง profiles โดยตรงหากยังไม่ได้อัปเดตฟังก์ชัน RPC ในฐานข้อมูล
         const { error: deleteError } = await supabase
           .from('profiles')
           .delete()
@@ -328,6 +380,7 @@ export function UsersAndDepartmentsPage() {
     }
   };
 
+  // --- ฟังก์ชันจัดการหน่วยงาน (Departments) ---
   const handleCreateDepartment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!deptCode.trim() || !deptName.trim()) {
@@ -364,6 +417,7 @@ export function UsersAndDepartmentsPage() {
       setDeptName('');
       setDeptPhone('');
       queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs-list'] });
     } catch (err) {
       toast.error(translateSupabaseError(err));
     } finally {
@@ -371,6 +425,140 @@ export function UsersAndDepartmentsPage() {
     }
   };
 
+  const openEditDepartment = (dept: Department) => {
+    setEditingDept(dept);
+    setEditDeptCode(dept.code);
+    setEditDeptName(dept.name);
+    setEditDeptPhone(dept.phone || '');
+    setEditDeptActive(dept.is_active);
+  };
+
+  const handleUpdateDepartment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDept) return;
+    if (!editDeptCode.trim() || !editDeptName.trim()) {
+      toast.error('กรุณากรอกรหัสและชื่อหน่วยงาน');
+      return;
+    }
+
+    setIsUpdatingDept(true);
+    try {
+      assertSupabaseConfigured();
+      const cleanCode = editDeptCode.trim().toUpperCase();
+      const cleanName = editDeptName.trim();
+      const cleanPhone = editDeptPhone.trim() || null;
+
+      const { error } = await supabase
+        .from('departments')
+        .update({
+          code: cleanCode,
+          name: cleanName,
+          phone: cleanPhone,
+          is_active: editDeptActive,
+        })
+        .eq('id', editingDept.id);
+
+      if (error) throw error;
+
+      await recordAuditLog({
+        action: 'DEPARTMENT_UPDATED',
+        entityType: 'departments',
+        entityId: editingDept.id,
+        summary: `แก้ไขข้อมูลหน่วยงาน: ${cleanCode} - ${cleanName}`,
+        beforeData: {
+          code: editingDept.code,
+          name: editingDept.name,
+          phone: editingDept.phone,
+          is_active: editingDept.is_active,
+        },
+        afterData: {
+          code: cleanCode,
+          name: cleanName,
+          phone: cleanPhone,
+          is_active: editDeptActive,
+        },
+      });
+
+      toast.success(`บันทึกการแก้ไขหน่วยงาน ${cleanName} เรียบร้อยแล้ว`);
+      setEditingDept(null);
+      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs-list'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsUpdatingDept(false);
+    }
+  };
+
+  const handleDeleteDepartment = async () => {
+    if (!deletingDept) return;
+
+    setIsDeletingDept(true);
+    try {
+      assertSupabaseConfigured();
+      const { error } = await supabase.from('departments').delete().eq('id', deletingDept.id);
+
+      if (error) throw error;
+
+      await recordAuditLog({
+        action: 'DEPARTMENT_DELETED',
+        entityType: 'departments',
+        entityId: deletingDept.id,
+        summary: `ลบหน่วยงาน: ${deletingDept.code} - ${deletingDept.name}`,
+        beforeData: {
+          code: deletingDept.code,
+          name: deletingDept.name,
+          phone: deletingDept.phone,
+        },
+      });
+
+      toast.success(`ลบหน่วยงาน ${deletingDept.name} ออกจากระบบเรียบร้อยแล้ว`);
+      setDeletingDept(null);
+      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs-list'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsDeletingDept(false);
+    }
+  };
+
+  const handleDeactivateDepartmentInstead = async () => {
+    if (!deletingDept) return;
+
+    setIsDeletingDept(true);
+    try {
+      assertSupabaseConfigured();
+      const { error } = await supabase
+        .from('departments')
+        .update({ is_active: false })
+        .eq('id', deletingDept.id);
+
+      if (error) throw error;
+
+      await recordAuditLog({
+        action: 'DEPARTMENT_DEACTIVATED',
+        entityType: 'departments',
+        entityId: deletingDept.id,
+        summary: `ปิดใช้งานหน่วยงาน: ${deletingDept.code} - ${deletingDept.name}`,
+      });
+
+      toast.success(`ปิดใช้งานหน่วยงาน ${deletingDept.name} เรียบร้อยแล้ว`);
+      setDeletingDept(null);
+      queryClient.invalidateQueries({ queryKey: ['departments'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs-list'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsDeletingDept(false);
+    }
+  };
+
+  // --- ฟังก์ชันจัดการอาคารและสถานที่ตั้ง (Locations) ---
   const handleCreateLocation = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!locCode.trim() || !locBuilding.trim() || !locName.trim()) {
@@ -389,6 +577,7 @@ export function UsersAndDepartmentsPage() {
           floor: locFloor.trim() || null,
           room: locRoom.trim() || null,
           name: locName.trim(),
+          description: locDescription.trim() || null,
           department_id: locDeptId || null,
           is_active: true,
         })
@@ -411,7 +600,10 @@ export function UsersAndDepartmentsPage() {
       setLocFloor('');
       setLocRoom('');
       setLocName('');
+      setLocDescription('');
+      setLocDeptId('');
       queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs-list'] });
     } catch (err) {
       toast.error(translateSupabaseError(err));
     } finally {
@@ -419,25 +611,172 @@ export function UsersAndDepartmentsPage() {
     }
   };
 
+  const openEditLocation = (loc: Location) => {
+    setEditingLoc(loc);
+    setEditLocCode(loc.code);
+    setEditLocBuilding(loc.building);
+    setEditLocFloor(loc.floor || '');
+    setEditLocRoom(loc.room || '');
+    setEditLocName(loc.name);
+    setEditLocDescription(loc.description || '');
+    setEditLocDeptId(loc.department_id || '');
+    setEditLocActive(loc.is_active);
+  };
+
+  const handleUpdateLocation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingLoc) return;
+    if (!editLocCode.trim() || !editLocBuilding.trim() || !editLocName.trim()) {
+      toast.error('กรุณากรอกรหัสสถานที่ อาคาร และชื่อสถานที่');
+      return;
+    }
+
+    setIsUpdatingLoc(true);
+    try {
+      assertSupabaseConfigured();
+      const cleanCode = editLocCode.trim().toUpperCase();
+      const cleanBuilding = editLocBuilding.trim();
+      const cleanFloor = editLocFloor.trim() || null;
+      const cleanRoom = editLocRoom.trim() || null;
+      const cleanName = editLocName.trim();
+      const cleanDesc = editLocDescription.trim() || null;
+      const cleanDeptId = editLocDeptId || null;
+
+      const { error } = await supabase
+        .from('locations')
+        .update({
+          code: cleanCode,
+          building: cleanBuilding,
+          floor: cleanFloor,
+          room: cleanRoom,
+          name: cleanName,
+          description: cleanDesc,
+          department_id: cleanDeptId,
+          is_active: editLocActive,
+        })
+        .eq('id', editingLoc.id);
+
+      if (error) throw error;
+
+      await recordAuditLog({
+        action: 'LOCATION_UPDATED',
+        entityType: 'locations',
+        entityId: editingLoc.id,
+        summary: `แก้ไขสถานที่ตั้ง: ${cleanCode} (${cleanBuilding} ห้อง ${cleanRoom || '-'})`,
+        beforeData: {
+          code: editingLoc.code,
+          building: editingLoc.building,
+          floor: editingLoc.floor,
+          room: editingLoc.room,
+          name: editingLoc.name,
+          department_id: editingLoc.department_id,
+          is_active: editingLoc.is_active,
+        },
+        afterData: {
+          code: cleanCode,
+          building: cleanBuilding,
+          floor: cleanFloor,
+          room: cleanRoom,
+          name: cleanName,
+          department_id: cleanDeptId,
+          is_active: editLocActive,
+        },
+      });
+
+      toast.success(`บันทึกการแก้ไขสถานที่ตั้ง ${cleanName} เรียบร้อยแล้ว`);
+      setEditingLoc(null);
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs-list'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsUpdatingLoc(false);
+    }
+  };
+
+  const handleDeleteLocation = async () => {
+    if (!deletingLoc) return;
+
+    setIsDeletingLoc(true);
+    try {
+      assertSupabaseConfigured();
+      const { error } = await supabase.from('locations').delete().eq('id', deletingLoc.id);
+
+      if (error) throw error;
+
+      await recordAuditLog({
+        action: 'LOCATION_DELETED',
+        entityType: 'locations',
+        entityId: deletingLoc.id,
+        summary: `ลบสถานที่ตั้ง: ${deletingLoc.code} - ${deletingLoc.building} (${deletingLoc.name})`,
+        beforeData: {
+          code: deletingLoc.code,
+          building: deletingLoc.building,
+          floor: deletingLoc.floor,
+          room: deletingLoc.room,
+          name: deletingLoc.name,
+        },
+      });
+
+      toast.success(`ลบสถานที่ตั้ง ${deletingLoc.name} ออกจากระบบเรียบร้อยแล้ว`);
+      setDeletingLoc(null);
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs-list'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsDeletingLoc(false);
+    }
+  };
+
+  const handleDeactivateLocationInstead = async () => {
+    if (!deletingLoc) return;
+
+    setIsDeletingLoc(true);
+    try {
+      assertSupabaseConfigured();
+      const { error } = await supabase
+        .from('locations')
+        .update({ is_active: false })
+        .eq('id', deletingLoc.id);
+
+      if (error) throw error;
+
+      await recordAuditLog({
+        action: 'LOCATION_DEACTIVATED',
+        entityType: 'locations',
+        entityId: deletingLoc.id,
+        summary: `ปิดใช้งานสถานที่ตั้ง: ${deletingLoc.code} - ${deletingLoc.name}`,
+      });
+
+      toast.success(`ปิดใช้งานสถานที่ตั้ง ${deletingLoc.name} เรียบร้อยแล้ว`);
+      setDeletingLoc(null);
+      queryClient.invalidateQueries({ queryKey: ['locations'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs-list'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsDeletingLoc(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="จัดการผู้ใช้ บทบาท หน่วยงาน และสถานที่ตั้ง"
-        subtitle="เพิ่ม แก้ไข ระงับ หรือลบบัญชีผู้ใช้งาน พร้อมกำหนดบทบาทสิทธิ์และจัดการโครงสร้างหน่วยงาน"
+        subtitle="เพิ่ม แก้ไข ระงับ หรือลบข้อมูลผู้ใช้งาน หน่วยงาน และอาคารสถานที่ตั้ง พร้อมบันทึกประวัติ Audit Log"
       />
 
-      {/* คำแนะนำการจัดการผู้ใช้ */}
+      {/* คำแนะนำการจัดการข้อมูลหลัก */}
       <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-xs text-sky-950 flex items-start gap-3">
         <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-700" />
         <div>
-          <p className="font-bold">การบริหารจัดการบัญชีบุคลากรและสิทธิ์การเข้าถึง (Admin Controls):</p>
+          <p className="font-bold">การบริหารจัดการข้อมูลหลักและสิทธิ์การเข้าถึง (Master Data &amp; Admin Controls):</p>
           <p className="mt-0.5 text-sky-900">
-            ผู้ดูแลระบบสามารถกดปุ่ม <strong>+ สร้างบัญชีผู้ใช้งานใหม่</strong> ด้านล่าง หรือกดปุ่ม{' '}
-            <strong>แก้ไข</strong> เพื่อเปลี่ยนชื่อ-นามสกุล เบอร์โทรศัพท์ ตำแหน่ง หน่วยงานสังกัด และระดับสิทธิ์ (
-            <code className="rounded bg-sky-200/70 px-1 py-0.5 font-mono">admin</code>,{' '}
-            <code className="rounded bg-sky-200/70 px-1 py-0.5 font-mono">asset_officer</code>,{' '}
-            <code className="rounded bg-sky-200/70 px-1 py-0.5 font-mono">requester</code>) รวมถึงกดปุ่ม{' '}
-            <strong>ลบ</strong> หรือระงับการใช้งานบัญชีได้ทันที
+            สามารถเพิ่ม แก้ไข หรือลบข้อมูลในทั้ง 3 ส่วน ได้แก่ <strong>บุคลากรและสิทธิ์ผู้ใช้งาน</strong>,{' '}
+            <strong>หน่วยงาน/กอง/สำนัก</strong> และ <strong>อาคาร/ชั้น/ห้อง</strong> ได้โดยตรง
+            หากรายการใดมีประวัติครุภัณฑ์ผูกอยู่ตามระเบียบพัสดุ ระบบมีปุ่มทางเลือกให้{' '}
+            <strong>ปิด/ระงับการใช้งาน</strong> แทนการลบถาวรเพื่อรักษาความถูกต้องของข้อมูลอ้างอิง
           </p>
         </div>
       </div>
@@ -519,9 +858,9 @@ export function UsersAndDepartmentsPage() {
 
       {/* Tab Content */}
       <div className="rounded-b-xl border border-t-0 border-slate-200 bg-white shadow-2xs overflow-hidden">
+        {/* แท็บที่ 1: ผู้ใช้งาน */}
         {activeTab === 'users' && (
           <div>
-            {/* แถบค้นหาและกรองผู้ใช้งาน */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 p-3.5">
               <div className="relative flex-1 min-w-[240px]">
                 <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -648,71 +987,181 @@ export function UsersAndDepartmentsPage() {
           </div>
         )}
 
+        {/* แท็บที่ 2: หน่วยงาน / กอง / สำนัก */}
         {activeTab === 'departments' && (
-          loadingDepts ? (
-            <LoadingState message="กำลังโหลดข้อมูลหน่วยงาน..." />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs font-semibold text-slate-600 border-b border-slate-200">
-                  <tr>
-                    <th className="p-3.5">รหัสหน่วยงาน</th>
-                    <th className="p-3.5">ชื่อหน่วยงาน / กอง / สำนัก</th>
-                    <th className="p-3.5">เบอร์โทรศัพท์ติดต่อ</th>
-                    <th className="p-3.5">สถานะ</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 text-xs">
-                  {departments.map((d) => (
-                    <tr key={d.id} className="hover:bg-slate-50">
-                      <td className="p-3.5 font-mono font-bold text-gov-700">{d.code}</td>
-                      <td className="p-3.5 font-semibold text-slate-900">{d.name}</td>
-                      <td className="p-3.5 text-slate-600">{d.phone || '-'}</td>
-                      <td className="p-3.5">
-                        <StatusBadge
-                          label={d.is_active ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
-                          className="bg-emerald-50 text-emerald-800 border-emerald-200"
-                        />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 p-3.5">
+              <div className="relative flex-1 min-w-[240px]">
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={deptSearch}
+                  onChange={(e) => setDeptSearch(e.target.value)}
+                  placeholder="ค้นหารหัสหน่วยงาน, ชื่อหน่วยงาน/กอง/สำนัก หรือเบอร์โทรศัพท์..."
+                  className="w-full rounded-lg border border-slate-300 bg-white py-1.5 pl-9 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none"
+                />
+              </div>
             </div>
-          )
+
+            {loadingDepts ? (
+              <LoadingState message="กำลังโหลดข้อมูลหน่วยงาน..." />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600 border-b border-slate-200">
+                    <tr>
+                      <th className="p-3.5">รหัสหน่วยงาน</th>
+                      <th className="p-3.5">ชื่อหน่วยงาน / กอง / สำนัก</th>
+                      <th className="p-3.5">เบอร์โทรศัพท์ติดต่อ</th>
+                      <th className="p-3.5">สถานะ</th>
+                      <th className="p-3.5 text-right">จัดการหน่วยงาน</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 text-xs">
+                    {filteredDepartments.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-8 text-center text-slate-500">
+                          ไม่พบข้อมูลหน่วยงานที่ค้นหา
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredDepartments.map((d) => (
+                        <tr key={d.id} className="hover:bg-slate-50">
+                          <td className="p-3.5 font-mono font-bold text-gov-700">{d.code}</td>
+                          <td className="p-3.5 font-semibold text-slate-900">{d.name}</td>
+                          <td className="p-3.5 text-slate-600">{d.phone || '-'}</td>
+                          <td className="p-3.5">
+                            <StatusBadge
+                              label={d.is_active ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
+                              className={
+                                d.is_active
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : 'bg-rose-50 text-rose-800 border-rose-200'
+                              }
+                            />
+                          </td>
+                          <td className="p-3.5 text-right">
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openEditDepartment(d)}
+                                className="inline-flex items-center gap-1 rounded-lg bg-gov-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-gov-800"
+                              >
+                                <Edit3 className="h-3.5 w-3.5" />
+                                แก้ไข
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingDept(d)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                ลบ
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
 
+        {/* แท็บที่ 3: อาคาร / ชั้น / ห้อง */}
         {activeTab === 'locations' && (
-          loadingLocs ? (
-            <LoadingState message="กำลังโหลดข้อมูลสถานที่ตั้ง..." />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs font-semibold text-slate-600 border-b border-slate-200">
-                  <tr>
-                    <th className="p-3.5">รหัสสถานที่</th>
-                    <th className="p-3.5">อาคาร</th>
-                    <th className="p-3.5">ชั้น / ห้อง</th>
-                    <th className="p-3.5">ชื่อห้อง / สถานที่ตั้ง</th>
-                    <th className="p-3.5">หน่วยงานที่ดูแล</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 text-xs">
-                  {locations.map((loc) => (
-                    <tr key={loc.id} className="hover:bg-slate-50">
-                      <td className="p-3.5 font-mono font-bold text-gov-700">{loc.code}</td>
-                      <td className="p-3.5 font-medium text-slate-900">{loc.building}</td>
-                      <td className="p-3.5 text-slate-600">
-                        ชั้น {loc.floor || '-'} / ห้อง {loc.room || '-'}
-                      </td>
-                      <td className="p-3.5 font-semibold text-slate-900">{loc.name}</td>
-                      <td className="p-3.5 text-slate-600">{loc.department?.name || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 p-3.5">
+              <div className="relative flex-1 min-w-[240px]">
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={locSearch}
+                  onChange={(e) => setLocSearch(e.target.value)}
+                  placeholder="ค้นหารหัสสถานที่, อาคาร, ห้อง, ชื่อสถานที่ หรือหน่วยงานที่ดูแล..."
+                  className="w-full rounded-lg border border-slate-300 bg-white py-1.5 pl-9 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none"
+                />
+              </div>
             </div>
-          )
+
+            {loadingLocs ? (
+              <LoadingState message="กำลังโหลดข้อมูลสถานที่ตั้ง..." />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600 border-b border-slate-200">
+                    <tr>
+                      <th className="p-3.5">รหัสสถานที่</th>
+                      <th className="p-3.5">อาคาร</th>
+                      <th className="p-3.5">ชั้น / ห้อง</th>
+                      <th className="p-3.5">ชื่อห้อง / สถานที่ตั้ง</th>
+                      <th className="p-3.5">หน่วยงานที่ดูแล</th>
+                      <th className="p-3.5">สถานะ</th>
+                      <th className="p-3.5 text-right">จัดการสถานที่ตั้ง</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 text-xs">
+                    {filteredLocations.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-slate-500">
+                          ไม่พบข้อมูลอาคารหรือสถานที่ตั้งที่ค้นหา
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredLocations.map((loc) => (
+                        <tr key={loc.id} className="hover:bg-slate-50">
+                          <td className="p-3.5 font-mono font-bold text-gov-700">{loc.code}</td>
+                          <td className="p-3.5 font-medium text-slate-900">{loc.building}</td>
+                          <td className="p-3.5 text-slate-600">
+                            ชั้น {loc.floor || '-'} / ห้อง {loc.room || '-'}
+                          </td>
+                          <td className="p-3.5">
+                            <div className="font-semibold text-slate-900">{loc.name}</div>
+                            {loc.description && (
+                              <div className="text-[11px] text-slate-500">{loc.description}</div>
+                            )}
+                          </td>
+                          <td className="p-3.5 text-slate-600">{loc.department?.name || '-'}</td>
+                          <td className="p-3.5">
+                            <StatusBadge
+                              label={loc.is_active ? 'เปิดใช้งาน' : 'ปิดใช้งาน'}
+                              className={
+                                loc.is_active
+                                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                  : 'bg-rose-50 text-rose-800 border-rose-200'
+                              }
+                            />
+                          </td>
+                          <td className="p-3.5 text-right">
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => openEditLocation(loc)}
+                                className="inline-flex items-center gap-1 rounded-lg bg-gov-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-gov-800"
+                              >
+                                <Edit3 className="h-3.5 w-3.5" />
+                                แก้ไข
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingLoc(loc)}
+                                className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                ลบ
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
@@ -1048,6 +1497,7 @@ export function UsersAndDepartmentsPage() {
               onChange={(e) => setDeptCode(e.target.value)}
               placeholder="เช่น HRD, FIN"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono uppercase"
+              required
             />
           </div>
           <div>
@@ -1058,6 +1508,7 @@ export function UsersAndDepartmentsPage() {
               onChange={(e) => setDeptName(e.target.value)}
               placeholder="เช่น กองการเจ้าหน้าที่"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              required
             />
           </div>
           <div>
@@ -1089,6 +1540,148 @@ export function UsersAndDepartmentsPage() {
         </form>
       </Modal>
 
+      {/* Modal แก้ไขหน่วยงาน */}
+      <Modal
+        open={Boolean(editingDept)}
+        onClose={() => setEditingDept(null)}
+        title={`แก้ไขหน่วยงาน: ${editingDept?.name || ''}`}
+        maxWidth="max-w-md"
+      >
+        {editingDept && (
+          <form onSubmit={handleUpdateDepartment} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">รหัสหน่วยงาน (Code) *</label>
+              <input
+                type="text"
+                value={editDeptCode}
+                onChange={(e) => setEditDeptCode(e.target.value)}
+                placeholder="เช่น HRD, FIN"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono uppercase"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">ชื่อหน่วยงาน *</label>
+              <input
+                type="text"
+                value={editDeptName}
+                onChange={(e) => setEditDeptName(e.target.value)}
+                placeholder="เช่น กองการเจ้าหน้าที่"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">เบอร์โทรศัพท์ภายใน</label>
+              <input
+                type="text"
+                value={editDeptPhone}
+                onChange={(e) => setEditDeptPhone(e.target.value)}
+                placeholder="เช่น 02-123-4567 ต่อ 101"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <input
+                id="dept-active"
+                type="checkbox"
+                checked={editDeptActive}
+                onChange={(e) => setEditDeptActive(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-gov-700"
+              />
+              <label htmlFor="dept-active" className="text-xs font-medium text-slate-700">
+                เปิดใช้งานหน่วยงานนี้ในระบบ
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setEditingDept(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdatingDept}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gov-700 px-4 py-2 text-xs font-semibold text-white hover:bg-gov-800"
+              >
+                {isUpdatingDept ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ShieldCheck className="h-4 w-4" />
+                )}
+                บันทึกการแก้ไข
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Modal ยืนยันการลบหน่วยงาน */}
+      <Modal
+        open={Boolean(deletingDept)}
+        onClose={() => setDeletingDept(null)}
+        title="ยืนยันการลบหน่วยงาน"
+        description="กรุณาตรวจสอบข้อมูลหน่วยงานก่อนดำเนินการลบออกจากระบบ"
+        maxWidth="max-w-md"
+      >
+        {deletingDept && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-900">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+              <div className="space-y-1">
+                <p className="font-bold">คุณกำลังจะลบหน่วยงานต่อไปนี้:</p>
+                <p>
+                  รหัสหน่วยงาน: <strong className="font-mono">{deletingDept.code}</strong>
+                </p>
+                <p>
+                  ชื่อหน่วยงาน: <strong>{deletingDept.name}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900 leading-relaxed">
+              <strong>หมายเหตุ:</strong> หากหน่วยงานนี้มีครุภัณฑ์สังกัดอยู่ในทะเบียนครุภัณฑ์ ระบบฐานข้อมูลจะป้องกันการลบถาวรเพื่อไม่ให้ข้อมูลครุภัณฑ์สูญหาย แนะนำให้กดปุ่ม{' '}
+              <strong>&ldquo;ปิดใช้งานหน่วยงานแทน&rdquo;</strong>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setDeletingDept(null)}
+                disabled={isDeletingDept}
+                className="rounded-lg border border-slate-300 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleDeactivateDepartmentInstead}
+                disabled={isDeletingDept}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                ปิดใช้งานหน่วยงานแทน
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteDepartment}
+                disabled={isDeletingDept}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+              >
+                {isDeletingDept ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                ยืนยันการลบถาวร
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Modal เพิ่มสถานที่ตั้ง */}
       <Modal
         open={isLocModalOpen}
@@ -1105,6 +1698,7 @@ export function UsersAndDepartmentsPage() {
               onChange={(e) => setLocCode(e.target.value)}
               placeholder="เช่น BLD-A-301"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono uppercase"
+              required
             />
           </div>
           <div>
@@ -1115,6 +1709,7 @@ export function UsersAndDepartmentsPage() {
               onChange={(e) => setLocBuilding(e.target.value)}
               placeholder="เช่น อาคารอำนวยการ A"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              required
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -1146,6 +1741,17 @@ export function UsersAndDepartmentsPage() {
               value={locName}
               onChange={(e) => setLocName(e.target.value)}
               placeholder="เช่น ห้องปฏิบัติการคอมพิวเตอร์"
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700">รายละเอียดเพิ่มเติม</label>
+            <input
+              type="text"
+              value={locDescription}
+              onChange={(e) => setLocDescription(e.target.value)}
+              placeholder="เช่น ฝั่งทิศเหนือ ติดห้องประชุม"
               className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
           </div>
@@ -1182,6 +1788,202 @@ export function UsersAndDepartmentsPage() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal แก้ไขสถานที่ตั้ง */}
+      <Modal
+        open={Boolean(editingLoc)}
+        onClose={() => setEditingLoc(null)}
+        title={`แก้ไขอาคาร/สถานที่ตั้ง: ${editingLoc?.name || ''}`}
+        maxWidth="max-w-md"
+      >
+        {editingLoc && (
+          <form onSubmit={handleUpdateLocation} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">รหัสสถานที่ *</label>
+              <input
+                type="text"
+                value={editLocCode}
+                onChange={(e) => setEditLocCode(e.target.value)}
+                placeholder="เช่น BLD-A-301"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono uppercase"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">ชื่ออาคาร *</label>
+              <input
+                type="text"
+                value={editLocBuilding}
+                onChange={(e) => setEditLocBuilding(e.target.value)}
+                placeholder="เช่น อาคารอำนวยการ A"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">ชั้น (Floor)</label>
+                <input
+                  type="text"
+                  value={editLocFloor}
+                  onChange={(e) => setEditLocFloor(e.target.value)}
+                  placeholder="เช่น 3"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">เลขห้อง (Room)</label>
+                <input
+                  type="text"
+                  value={editLocRoom}
+                  onChange={(e) => setEditLocRoom(e.target.value)}
+                  placeholder="เช่น 301"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">ชื่อห้อง / สถานที่ *</label>
+              <input
+                type="text"
+                value={editLocName}
+                onChange={(e) => setEditLocName(e.target.value)}
+                placeholder="เช่น ห้องปฏิบัติการคอมพิวเตอร์"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">รายละเอียดเพิ่มเติม</label>
+              <input
+                type="text"
+                value={editLocDescription}
+                onChange={(e) => setEditLocDescription(e.target.value)}
+                placeholder="เช่น ฝั่งทิศเหนือ ติดห้องประชุม"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">หน่วยงานที่ดูแล</label>
+              <select
+                value={editLocDeptId}
+                onChange={(e) => setEditLocDeptId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">-- ไม่ระบุ --</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.code} - {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <input
+                id="loc-active"
+                type="checkbox"
+                checked={editLocActive}
+                onChange={(e) => setEditLocActive(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-gov-700"
+              />
+              <label htmlFor="loc-active" className="text-xs font-medium text-slate-700">
+                เปิดใช้งานสถานที่ตั้งนี้ในระบบ
+              </label>
+            </div>
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setEditingLoc(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                disabled={isUpdatingLoc}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gov-700 px-4 py-2 text-xs font-semibold text-white hover:bg-gov-800"
+              >
+                {isUpdatingLoc ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ShieldCheck className="h-4 w-4" />
+                )}
+                บันทึกการแก้ไข
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      {/* Modal ยืนยันการลบสถานที่ตั้ง */}
+      <Modal
+        open={Boolean(deletingLoc)}
+        onClose={() => setDeletingLoc(null)}
+        title="ยืนยันการลบอาคาร / สถานที่ตั้ง"
+        description="กรุณาตรวจสอบข้อมูลสถานที่ตั้งก่อนดำเนินการลบออกจากระบบ"
+        maxWidth="max-w-md"
+      >
+        {deletingLoc && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-900">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+              <div className="space-y-1">
+                <p className="font-bold">คุณกำลังจะลบสถานที่ตั้งต่อไปนี้:</p>
+                <p>
+                  รหัสสถานที่: <strong className="font-mono">{deletingLoc.code}</strong>
+                </p>
+                <p>
+                  อาคาร / ห้อง:{' '}
+                  <strong>
+                    {deletingLoc.building} (ชั้น {deletingLoc.floor || '-'} / ห้อง {deletingLoc.room || '-'})
+                  </strong>
+                </p>
+                <p>
+                  ชื่อสถานที่: <strong>{deletingLoc.name}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900 leading-relaxed">
+              <strong>หมายเหตุ:</strong> หากลบสถานที่ตั้งถาวร ครุภัณฑ์ที่เคยผูกไว้กับห้องนี้จะถูกปรับสถานะสถานที่ตั้งเป็น &ldquo;ไม่ระบุ&rdquo; อัตโนมัติ หรือสามารถเลือกกดปุ่ม{' '}
+              <strong>&ldquo;ปิดใช้งานสถานที่แทน&rdquo;</strong> เพื่อเก็บประวัติเดิมไว้ได้
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setDeletingLoc(null)}
+                disabled={isDeletingLoc}
+                className="rounded-lg border border-slate-300 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleDeactivateLocationInstead}
+                disabled={isDeletingLoc}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                ปิดใช้งานสถานที่แทน
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteLocation}
+                disabled={isDeletingLoc}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+              >
+                {isDeletingLoc ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                ยืนยันการลบถาวร
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
