@@ -5,7 +5,61 @@
 @layer base {
   body {
     font-family: 'Sarabun', 'Noto Sans Thai', system-ui, -apple-system, sans-serif;
+    background-color: #F6F4F0; /* PANTONE 11-4201 Cloud Dancer */
+    color: #2B2638;
   }
+
+  ::selection {
+    background-color: #DCD6F0; /* PANTONE Orchid Ice */
+    color: #2E2348;
+  }
+}
+
+/* แสดงวันที่ใน <input type="date"> และ <input type="datetime-local"> เป็นรูปแบบ พ.ศ. ไทยทั้งหมด */
+input[type='date'][data-thai-date],
+input[type='datetime-local'][data-thai-date] {
+  position: relative;
+}
+
+input[type='date'][data-thai-date]::-webkit-datetime-edit,
+input[type='datetime-local'][data-thai-date]::-webkit-datetime-edit {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
+
+input[type='date'][data-thai-date]::before,
+input[type='datetime-local'][data-thai-date]::before {
+  content: attr(data-thai-date);
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: #1e293b;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 2.5rem);
+}
+
+input[type='date'][data-thai-empty='true']::before,
+input[type='datetime-local'][data-thai-empty='true']::before {
+  color: #94a3b8;
+  font-weight: 400;
+}
+
+input[type='date']::-webkit-calendar-picker-indicator,
+input[type='datetime-local']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+input[type='date']::-webkit-calendar-picker-indicator:hover,
+input[type='datetime-local']::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  transform: scale(1.1);
 }
 
 @keyframes modalBackdropFadeIn {

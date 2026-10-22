@@ -1,7 +1,7 @@
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { formatThaiDateTime } from './date';
+import { formatThaiDateTime, getBuddhistDateStamp } from './date';
 
 /**
  * ป้องกัน CSV / Spreadsheet Formula Injection (OWASP CSV Injection)
@@ -102,7 +102,7 @@ export function exportToExcel<T extends Record<string, unknown>>(
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'รายงานพัสดุ');
 
-  const dateStamp = new Date().toISOString().slice(0, 10);
+  const dateStamp = getBuddhistDateStamp(new Date());
   XLSX.writeFile(workbook, `${meta.fileNamePrefix}_${dateStamp}.xlsx`);
 }
 
@@ -168,11 +168,11 @@ export async function exportToPDF<T extends Record<string, unknown>>(
       font: fontName,
       fontStyle: 'bold',
       fontSize: 9.5,
-      fillColor: [30, 58, 138], // สีน้ำเงินราชการ #1e3a8a
+      fillColor: [95, 75, 139], // PANTONE 18-3838 Ultra Violet (#5F4B8B)
       textColor: 255,
     },
     alternateRowStyles: {
-      fillColor: [248, 250, 252],
+      fillColor: [246, 245, 250],
     },
     didDrawPage: (data) => {
       const pageCount = doc.getNumberOfPages();
@@ -188,7 +188,7 @@ export async function exportToPDF<T extends Record<string, unknown>>(
     },
   });
 
-  const dateStamp = new Date().toISOString().slice(0, 10);
+  const dateStamp = getBuddhistDateStamp(new Date());
   doc.save(`${meta.fileNamePrefix}_${dateStamp}.pdf`);
 }
 
@@ -202,7 +202,7 @@ export const SAMPLE_ASSET_IMPORT_ROWS = [
     'รุ่น (Model)': 'Latitude 5440',
     'หมายเลขเครื่อง (Serial Number)': 'DL5440-TH-9001',
     'ราคาต่อหน่วย (บาท)': 28500,
-    'วันที่รับเข้า / วันที่ตรวจรับ': '2026-10-15',
+    'วันที่รับเข้า / วันที่ตรวจรับ': '15/10/2569',
     'เลขที่สัญญาจัดซื้อ / ใบตรวจรับ': 'สญ.021/2569',
     'หน่วยงาน/กองผู้ครอบครอง': 'ITD',
     'อาคาร / ห้อง / สถานที่ตั้ง': 'BLD-A-405',
@@ -256,7 +256,7 @@ export const SAMPLE_ASSET_IMPORT_ROWS = [
     'รุ่น (Model)': 'EB-L530U',
     'หมายเลขเครื่อง (Serial Number)': 'EPS530-TH-9004',
     'ราคาต่อหน่วย (บาท)': 64000,
-    'วันที่รับเข้า / วันที่ตรวจรับ': '2026-10-20',
+    'วันที่รับเข้า / วันที่ตรวจรับ': '20/10/2569',
     'เลขที่สัญญาจัดซื้อ / ใบตรวจรับ': 'สญ.025/2569',
     'หน่วยงาน/กองผู้ครอบครอง': 'PLD',
     'อาคาร / ห้อง / สถานที่ตั้ง': 'BLD-A-302',

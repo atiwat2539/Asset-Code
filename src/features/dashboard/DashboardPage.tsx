@@ -42,7 +42,8 @@ import { useAuth } from '@/features/auth/AuthContext';
 import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '@/components/ui/common';
 import type { Asset, BorrowRequest, CorporateEvent } from '@/types/database';
 
-const PIE_COLORS = ['#10b981', '#0ea5e9', '#f59e0b', '#f97316', '#64748b', '#e11d48'];
+// ชุดสี PANTONE (Greenery, Serenity, Peach Fuzz, Living Coral, Mocha Mousse, Very Peri)
+const PIE_COLORS = ['#5B9E7D', '#6F9FD8', '#E89968', '#E06D79', '#A47864', '#6667AB'];
 
 function formatFullThaiCurrentDate(date: Date): string {
   try {
@@ -454,14 +455,14 @@ export function DashboardPage() {
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                   <Tooltip
-                    cursor={{ fill: 'rgba(14, 165, 233, 0.12)' }}
+                    cursor={{ fill: 'rgba(102, 103, 171, 0.12)' }}
                     contentStyle={{
                       borderRadius: '12px',
-                      border: '1px solid #bae6fd',
-                      boxShadow: '0 10px 25px -5px rgba(14, 165, 233, 0.2)',
+                      border: '1px solid #DCD6F0',
+                      boxShadow: '0 10px 25px -5px rgba(95, 75, 139, 0.2)',
                     }}
                   />
-                  <Bar dataKey="count" name="จำนวนครุภัณฑ์ (รายการ)" fill="#1e3a8a" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="count" name="จำนวนครุภัณฑ์ (รายการ)" fill="#6667AB" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -529,14 +530,14 @@ export function DashboardPage() {
                   <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11 }} />
                   <YAxis dataKey="name" type="category" width={120} tick={{ fontSize: 11 }} />
                   <Tooltip
-                    cursor={{ fill: 'rgba(2, 132, 199, 0.12)' }}
+                    cursor={{ fill: 'rgba(95, 75, 139, 0.12)' }}
                     contentStyle={{
                       borderRadius: '12px',
-                      border: '1px solid #bae6fd',
-                      boxShadow: '0 10px 25px -5px rgba(2, 132, 199, 0.2)',
+                      border: '1px solid #DCD6F0',
+                      boxShadow: '0 10px 25px -5px rgba(95, 75, 139, 0.2)',
                     }}
                   />
-                  <Bar dataKey="count" name="จำนวน (รายการ)" fill="#0284c7" radius={[0, 6, 6, 0]} />
+                  <Bar dataKey="count" name="จำนวน (รายการ)" fill="#5F4B8B" radius={[0, 6, 6, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}

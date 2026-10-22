@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -18,12 +18,13 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
-  Building2,
   Menu,
   X,
   UserCircle2,
+  Clock,
 } from 'lucide-react';
 import { cn, ROLE_LABELS } from '@/lib/utils';
+import { formatThaiDate, formatThaiDateNumeric, formatThaiDateTime } from '@/lib/date';
 import { useAuth } from '@/features/auth/AuthContext';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { SetupGuideBanner } from './SetupGuideBanner';
@@ -119,10 +120,60 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export function AppLayout() {
-  const { profile, user, role, signOut } = useAuth();
+  const { profile, user, role, remainingSessionSeconds, signOut } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  // แปลงการแสดงผลของ <input type="date"> และ <input type="datetime-local"> ทุกจุดในระบบให้แสดงเป็นปี พ.ศ. อัตโนมัติ
+  useEffect(() => {
+    const syncAllDateInputs = () => {
+      const inputs = document.querySelectorAll<HTMLInputElement>(
+        'input[type="date"], input[type="datetime-local"]'
+      );
+      inputs.forEach((input) => {
+        const val = input.value;
+        if (!val) {
+          const placeholder =
+            input.type === 'datetime-local'
+              ? 'วว/ดด/ปปปป ชม.:นาที (พ.ศ.)'
+              : 'วว/ดด/ปปปป (พ.ศ.)';
+          if (input.getAttribute('data-thai-date') !== placeholder) {
+            input.setAttribute('data-thai-date', placeholder);
+          }
+          if (input.getAttribute('data-thai-empty') !== 'true') {
+            input.setAttribute('data-thai-empty', 'true');
+          }
+        } else {
+          const formatted =
+            input.type === 'datetime-local'
+              ? `${formatThaiDateTime(val)} (พ.ศ.)`
+              : `${formatThaiDateNumeric(val)} (${formatThaiDate(val)})`;
+          if (input.getAttribute('data-thai-date') !== formatted) {
+            input.setAttribute('data-thai-date', formatted);
+          }
+          if (input.getAttribute('data-thai-empty') !== 'false') {
+            input.setAttribute('data-thai-empty', 'false');
+          }
+        }
+      });
+    };
+
+    syncAllDateInputs();
+    const timer = window.setInterval(syncAllDateInputs, 250);
+    document.addEventListener('input', syncAllDateInputs, true);
+    document.addEventListener('change', syncAllDateInputs, true);
+
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('input', syncAllDateInputs, true);
+      document.removeEventListener('change', syncAllDateInputs, true);
+    };
+  }, []);
+
+  const sessionMinutes = String(Math.floor(remainingSessionSeconds / 60)).padStart(2, '0');
+  const sessionSeconds = String(remainingSessionSeconds % 60).padStart(2, '0');
+  const isSessionLow = remainingSessionSeconds <= 120;
 
   const { data: settings } = useQuery({
     queryKey: ['system-settings'],
@@ -146,28 +197,30 @@ export function AppLayout() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-slate-100">
+    <div className="min-h-screen flex flex-col bg-pantone-cloud">
+      {/* แถบสี PANTONE Signature ด้านบนสุด */}
+      <div className="h-1 w-full bg-gradient-to-r from-gov-700 via-pantone-peri to-pantone-peach" />
       <SetupGuideBanner />
 
       <div className="flex flex-1">
         {/* Mobile Overlay */}
         {mobileOpen && (
           <div
-            className="fixed inset-0 z-40 bg-slate-900/60 lg:hidden"
+            className="fixed inset-0 z-40 bg-gov-900/60 backdrop-blur-xs lg:hidden"
             onClick={() => setMobileOpen(false)}
           />
         )}
 
-        {/* Sidebar */}
+        {/* Sidebar (PANTONE Ultra Violet / Nightshade Tone) */}
         <aside
           className={cn(
-            'fixed inset-y-0 left-0 z-50 flex flex-col bg-gov-900 text-slate-100 transition-all duration-200 lg:static',
+            'fixed inset-y-0 left-0 z-50 flex flex-col bg-gradient-to-b from-gov-900 via-gov-800 to-gov-900 text-slate-100 shadow-xl transition-all duration-200 lg:static',
             collapsed ? 'w-20' : 'w-68',
             mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
           )}
         >
           {/* Brand Header */}
-          <div className="flex h-16 items-center justify-between border-b border-white/10 px-4 bg-gov-800/80">
+          <div className="flex h-16 items-center justify-between border-b border-white/10 px-4 bg-white/5 backdrop-blur-xs">
             <div className="flex items-center gap-3 overflow-hidden">
               <img
                 src={settings?.logo_url || '/cmu-library-logo.png'}
@@ -177,7 +230,7 @@ export function AppLayout() {
               {!collapsed && (
                 <div className="truncate">
                   <p className="truncate text-sm font-bold text-white leading-tight">{orgShort}</p>
-                  <p className="truncate text-[11px] text-sky-200/80">ระบบบริหารครุภัณฑ์</p>
+                  <p className="truncate text-[11px] text-gov-200/90">สำนักหอสมุด มช.</p>
                 </div>
               )}
             </div>
@@ -270,6 +323,21 @@ export function AppLayout() {
             </div>
 
             <div className="flex items-center gap-3">
+              {user && (
+                <div
+                  className={cn(
+                    'hidden md:inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors',
+                    isSessionLow
+                      ? 'border-rose-300 bg-rose-50 text-rose-700 animate-pulse'
+                      : 'border-gov-200 bg-gov-50 text-gov-700'
+                  )}
+                  title="ตัดเซสชันอัตโนมัติหากไม่มีการใช้งานเกิน 15 นาที"
+                >
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>เซสชัน {sessionMinutes}:{sessionSeconds}</span>
+                </div>
+              )}
+
               <div className="hidden text-right sm:block">
                 <p className="text-xs font-semibold text-slate-800">
                   {profile?.full_name || user?.email || 'โหมดตรวจสอบระบบ'}

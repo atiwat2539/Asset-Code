@@ -1,7 +1,13 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
+import { toast } from 'sonner';
 import { isSupabaseConfigured, recordAuditLog, supabase } from '@/lib/supabase';
 import type { Profile, UserRole } from '@/types/database';
+
+/** กำหนดเวลา Session Timeout ที่ 15 นาที (900,000 มิลลิวินาที) */
+export const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
+export const SESSION_TIMEOUT_SECONDS = 15 * 60;
+const LAST_ACTIVITY_STORAGE_KEY = 'cmu_library_last_activity_ts';
 
 interface AuthContextValue {
   session: Session | null;
@@ -10,6 +16,7 @@ interface AuthContextValue {
   role: UserRole;
   isLoading: boolean;
   isConfigured: boolean;
+  remainingSessionSeconds: number;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   hasRole: (allowedRoles: UserRole[]) => boolean;
@@ -22,7 +29,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [remainingSessionSeconds, setRemainingSessionSeconds] = useState<number>(SESSION_TIMEOUT_SECONDS);
   const configured = isSupabaseConfigured();
+  const isTimingOutRef = useRef(false);
 
   const fetchProfile = useCallback(async (userId: string, userEmail?: string) => {
     if (!configured) {
@@ -73,6 +82,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     supabase.auth.getSession().then(async ({ data: { session: currentSession } }) => {
       if (!mounted) return;
+
+      if (currentSession?.user) {
+        const storedTs = Number(localStorage.getItem(LAST_ACTIVITY_STORAGE_KEY) || 0);
+        const now = Date.now();
+        if (storedTs > 0 && now - storedTs >= SESSION_TIMEOUT_MS) {
+          // หากเคยเปิดค้างไว้และเกิน 15 นาทีแล้ว ให้ออกจากระบบทันที
+          localStorage.removeItem(LAST_ACTIVITY_STORAGE_KEY);
+          await supabase.auth.signOut();
+          if (mounted) {
+            setSession(null);
+            setUser(null);
+            setProfile(null);
+            setIsLoading(false);
+            toast.warning('เซสชันหมดอายุเนื่องจากไม่มีการใช้งานเกิน 15 นาที กรุณาเข้าสู่ระบบใหม่');
+          }
+          return;
+        }
+        localStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, String(now));
+      }
+
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
       if (currentSession?.user) {
@@ -83,8 +112,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return;
+      if (event === 'SIGNED_IN' && newSession?.user) {
+        localStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, String(Date.now()));
+        setRemainingSessionSeconds(SESSION_TIMEOUT_SECONDS);
+        isTimingOutRef.current = false;
+      } else if (event === 'SIGNED_OUT') {
+        localStorage.removeItem(LAST_ACTIVITY_STORAGE_KEY);
+      }
+
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
@@ -108,6 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [user, fetchProfile]);
 
   const signOut = useCallback(async () => {
+    localStorage.removeItem(LAST_ACTIVITY_STORAGE_KEY);
     if (configured) {
       await recordAuditLog({
         action: 'AUTH_LOGOUT',
@@ -120,6 +158,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setUser(null);
     setProfile(null);
+  }, [configured, user, profile]);
+
+  // ระบบตรวจจับความเคลื่อนไหวและตัดเซสชันอัตโนมัติเมื่อไม่มีการใช้งานครบ 15 นาที
+  useEffect(() => {
+    if (!configured || !user) {
+      setRemainingSessionSeconds(SESSION_TIMEOUT_SECONDS);
+      return;
+    }
+
+    if (!localStorage.getItem(LAST_ACTIVITY_STORAGE_KEY)) {
+      localStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, String(Date.now()));
+    }
+
+    let lastWrite = Date.now();
+    const recordActivity = () => {
+      const now = Date.now();
+      // บันทึกความเคลื่อนไหวอย่างน้อยทุกๆ 2 วินาทีเพื่อประสิทธิภาพสูงสุด
+      if (now - lastWrite >= 2000) {
+        lastWrite = now;
+        localStorage.setItem(LAST_ACTIVITY_STORAGE_KEY, String(now));
+        setRemainingSessionSeconds(SESSION_TIMEOUT_SECONDS);
+      }
+    };
+
+    const activityEvents: (keyof WindowEventMap)[] = [
+      'mousemove',
+      'mousedown',
+      'keydown',
+      'scroll',
+      'touchstart',
+      'click',
+      'focus',
+    ];
+
+    activityEvents.forEach((evt) => window.addEventListener(evt, recordActivity, { passive: true }));
+
+    const intervalId = window.setInterval(async () => {
+      const lastTs = Number(localStorage.getItem(LAST_ACTIVITY_STORAGE_KEY) || Date.now());
+      const elapsedMs = Date.now() - lastTs;
+      const leftSec = Math.max(0, Math.ceil((SESSION_TIMEOUT_MS - elapsedMs) / 1000));
+      setRemainingSessionSeconds(leftSec);
+
+      if (elapsedMs >= SESSION_TIMEOUT_MS && !isTimingOutRef.current) {
+        isTimingOutRef.current = true;
+        localStorage.removeItem(LAST_ACTIVITY_STORAGE_KEY);
+
+        try {
+          await recordAuditLog({
+            action: 'AUTH_SESSION_TIMEOUT',
+            entityType: 'auth',
+            entityId: user.id,
+            summary: `ตัดเซสชันอัตโนมัติเนื่องจากไม่มีการใช้งานเกิน 15 นาที (${profile?.email || user.email || ''})`,
+          });
+          await supabase.auth.signOut();
+        } catch (err) {
+          console.error('Session timeout signout error:', err);
+        }
+
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        toast.warning('หมดเวลาเซสชัน (ไม่มีการใช้งานเกิน 15 นาที) ระบบได้ออกจากระบบอัตโนมัติ');
+      }
+    }, 1000);
+
+    return () => {
+      activityEvents.forEach((evt) => window.removeEventListener(evt, recordActivity));
+      window.clearInterval(intervalId);
+    };
   }, [configured, user, profile]);
 
   const role: UserRole = profile?.role || 'requester';
@@ -140,6 +247,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         role,
         isLoading,
         isConfigured: configured,
+        remainingSessionSeconds,
         signOut,
         refreshProfile,
         hasRole,

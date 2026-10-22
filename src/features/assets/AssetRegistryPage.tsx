@@ -37,7 +37,7 @@ import {
   formatCurrency,
   translateSupabaseError,
 } from '@/lib/utils';
-import { formatThaiDate } from '@/lib/date';
+import { formatThaiDate, normalizeToISODate } from '@/lib/date';
 import { downloadAssetImportTemplate, exportToExcel, exportToPDF } from '@/lib/export';
 import { uploadFileToBucket } from '@/lib/storage';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -721,9 +721,9 @@ export function AssetRegistryPage() {
         const unit_price = Number(
           row['ราคาต่อหน่วย (บาท)'] || row['ราคาต่อหน่วย'] || row['ราคาทุน'] || row['unit_price'] || 0
         );
-        const acquired_date = String(
-          row['วันที่รับเข้า / วันที่ตรวจรับ'] || row['วันที่รับเข้า'] || row['วันที่ได้มา'] || row['acquired_date'] || ''
-        ).trim();
+        const rawAcquiredDate =
+          row['วันที่รับเข้า / วันที่ตรวจรับ'] || row['วันที่รับเข้า'] || row['วันที่ได้มา'] || row['acquired_date'] || '';
+        const acquired_date = normalizeToISODate(rawAcquiredDate as string | number);
         const contract_number = String(
           row['เลขที่สัญญาจัดซื้อ / ใบตรวจรับ'] || row['เลขที่สัญญา'] || row['contract_number'] || ''
         ).trim();
