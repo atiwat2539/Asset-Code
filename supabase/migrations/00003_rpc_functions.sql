@@ -432,13 +432,15 @@ BEGIN
 END;
 $$;
 
--- 5. RPC: เปลี่ยนบทบาทและหน่วยงานของผู้ใช้โดย Admin เท่านั้น พร้อมบันทึก Audit Log
+-- 5. RPC: แก้ไขข้อมูล บทบาท และหน่วยงานของผู้ใช้โดย Admin เท่านั้น พร้อมบันทึก Audit Log
 CREATE OR REPLACE FUNCTION public.admin_update_user_role(
   p_target_user_id UUID,
   p_new_role TEXT,
   p_department_id UUID DEFAULT NULL,
   p_position TEXT DEFAULT NULL,
-  p_is_active BOOLEAN DEFAULT TRUE
+  p_is_active BOOLEAN DEFAULT TRUE,
+  p_full_name TEXT DEFAULT NULL,
+  p_phone TEXT DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -449,7 +451,7 @@ DECLARE
   v_old RECORD;
 BEGIN
   IF NOT public.is_admin() THEN
-    RAISE EXCEPTION 'เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่มีสิทธิ์เปลี่ยนบทบาทผู้ใช้';
+    RAISE EXCEPTION 'เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่มีสิทธิ์แก้ไขข้อมูลและบทบาทผู้ใช้';
   END IF;
 
   IF p_new_role NOT IN ('admin', 'asset_officer', 'requester') THEN
@@ -463,9 +465,11 @@ BEGIN
 
   UPDATE public.profiles
   SET
+    full_name = COALESCE(NULLIF(TRIM(p_full_name), ''), full_name),
     role = p_new_role,
-    department_id = COALESCE(p_department_id, department_id),
-    position = COALESCE(p_position, position),
+    department_id = p_department_id,
+    position = p_position,
+    phone = COALESCE(p_phone, phone),
     is_active = p_is_active,
     updated_at = NOW()
   WHERE id = p_target_user_id;
@@ -474,11 +478,69 @@ BEGIN
     'USER_ROLE_UPDATED',
     'profiles',
     p_target_user_id::TEXT,
-    format('ปรับสิทธิ์ผู้ใช้ %s จาก %s เป็น %s', v_old.email, v_old.role, p_new_role),
-    jsonb_build_object('role', v_old.role, 'is_active', v_old.is_active),
-    jsonb_build_object('role', p_new_role, 'is_active', p_is_active)
+    format('แก้ไขข้อมูล/สิทธิ์ผู้ใช้ %s (สิทธิ์: %s -> %s)', v_old.email, v_old.role, p_new_role),
+    jsonb_build_object(
+      'full_name', v_old.full_name,
+      'role', v_old.role,
+      'department_id', v_old.department_id,
+      'position', v_old.position,
+      'is_active', v_old.is_active
+    ),
+    jsonb_build_object(
+      'full_name', COALESCE(NULLIF(TRIM(p_full_name), ''), v_old.full_name),
+      'role', p_new_role,
+      'department_id', p_department_id,
+      'position', p_position,
+      'is_active', p_is_active
+    )
   );
 
   RETURN jsonb_build_object('success', TRUE, 'user_id', p_target_user_id, 'role', p_new_role);
+END;
+$$;
+
+-- 6. RPC: ลบบัญชีผู้ใช้งานโดย Admin พร้อมบันทึก Audit Log
+CREATE OR REPLACE FUNCTION public.admin_delete_user(
+  p_target_user_id UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_old RECORD;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่มีสิทธิ์ลบบัญชีผู้ใช้งาน';
+  END IF;
+
+  IF p_target_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'ไม่สามารถลบบัญชีของตนเองที่กำลังเข้าสู่ระบบอยู่ได้';
+  END IF;
+
+  SELECT * INTO v_old FROM public.profiles WHERE id = p_target_user_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ไม่พบโปรไฟล์ผู้ใช้งานที่ต้องการลบ';
+  END IF;
+
+  PERFORM public.write_audit_log(
+    'USER_DELETED',
+    'profiles',
+    p_target_user_id::TEXT,
+    format('ลบบัญชีผู้ใช้งาน %s (%s) ออกจากระบบ', v_old.full_name, v_old.email),
+    jsonb_build_object(
+      'email', v_old.email,
+      'full_name', v_old.full_name,
+      'role', v_old.role,
+      'department_id', v_old.department_id
+    ),
+    NULL
+  );
+
+  DELETE FROM public.profiles WHERE id = p_target_user_id;
+  DELETE FROM auth.users WHERE id = p_target_user_id;
+
+  RETURN jsonb_build_object('success', TRUE, 'deleted_user_id', p_target_user_id);
 END;
 $$;

@@ -126,6 +126,11 @@ CREATE POLICY "profiles_insert_admin"
   TO authenticated
   WITH CHECK (id = auth.uid() OR public.is_admin());
 
+CREATE POLICY "profiles_delete_admin"
+  ON public.profiles FOR DELETE
+  TO authenticated
+  USING (public.is_admin() AND id <> auth.uid());
+
 -- 4.4 asset_categories
 CREATE POLICY "categories_select_authenticated"
   ON public.asset_categories FOR SELECT

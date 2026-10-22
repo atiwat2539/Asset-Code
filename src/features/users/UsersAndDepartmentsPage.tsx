@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
@@ -11,6 +11,10 @@ import {
   Loader2,
   Info,
   UserPlus,
+  Trash2,
+  Search,
+  AlertTriangle,
+  Ban,
 } from 'lucide-react';
 import {
   assertSupabaseConfigured,
@@ -20,30 +24,41 @@ import {
 } from '@/lib/supabase';
 import { ROLE_LABELS, translateSupabaseError } from '@/lib/utils';
 import { useDepartments, useLocations, useProfiles } from '@/hooks/useMasterData';
+import { useAuth } from '@/features/auth/AuthContext';
 import { LoadingState, Modal, PageHeader, StatusBadge } from '@/components/ui/common';
 import type { Profile, UserRole } from '@/types/database';
 
 export function UsersAndDepartmentsPage() {
   const queryClient = useQueryClient();
+  const { user: currentUser, refreshProfile } = useAuth();
   const { data: profiles = [], isLoading: loadingProfiles } = useProfiles();
   const { data: departments = [], isLoading: loadingDepts } = useDepartments();
   const { data: locations = [], isLoading: loadingLocs } = useLocations();
 
   const [activeTab, setActiveTab] = useState<'users' | 'departments' | 'locations'>('users');
+  const [userSearch, setUserSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
 
-  // Edit User Role State
+  // Edit User State (แก้ไขข้อมูลและบทบาทผู้ใช้งาน)
   const [editingProfile, setEditingProfile] = useState<Profile | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole>('requester');
   const [selectedDeptId, setSelectedDeptId] = useState('');
   const [positionText, setPositionText] = useState('');
   const [isActiveUser, setIsActiveUser] = useState(true);
   const [isSavingUser, setIsSavingUser] = useState(false);
 
+  // Delete User State (ลบผู้ใช้งาน)
+  const [deletingProfile, setDeletingProfile] = useState<Profile | null>(null);
+  const [isDeletingUser, setIsDeletingUser] = useState(false);
+
   // Create User State (Admin สร้างบัญชีให้บุคลากรโดยตรง)
   const [isCreateUserModalOpen, setIsCreateUserModalOpen] = useState(false);
   const [newUserFullName, setNewUserFullName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserPhone, setNewUserPhone] = useState('');
   const [newUserRole, setNewUserRole] = useState<UserRole>('requester');
   const [newUserDeptId, setNewUserDeptId] = useState('');
   const [newUserPosition, setNewUserPosition] = useState('');
@@ -66,8 +81,24 @@ export function UsersAndDepartmentsPage() {
   const [locDeptId, setLocDeptId] = useState('');
   const [isSavingLoc, setIsSavingLoc] = useState(false);
 
+  const filteredProfiles = useMemo(() => {
+    return profiles.filter((p) => {
+      const q = userSearch.trim().toLowerCase();
+      const matchesSearch =
+        !q ||
+        p.full_name.toLowerCase().includes(q) ||
+        p.email.toLowerCase().includes(q) ||
+        (p.position || '').toLowerCase().includes(q) ||
+        (p.department?.name || '').toLowerCase().includes(q);
+      const matchesRole = roleFilter === 'all' || p.role === roleFilter;
+      return matchesSearch && matchesRole;
+    });
+  }, [profiles, userSearch, roleFilter]);
+
   const openEditUser = (p: Profile) => {
     setEditingProfile(p);
+    setEditFullName(p.full_name || '');
+    setEditPhone(p.phone || '');
     setSelectedRole(p.role);
     setSelectedDeptId(p.department_id || '');
     setPositionText(p.position || '');
@@ -77,22 +108,72 @@ export function UsersAndDepartmentsPage() {
   const handleSaveUserRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProfile) return;
+    if (!editFullName.trim()) {
+      toast.error('กรุณากรอกชื่อ-นามสกุลของผู้ใช้งาน');
+      return;
+    }
 
     setIsSavingUser(true);
     try {
       assertSupabaseConfigured();
-      // เรียกใช้ RPC admin_update_user_role ที่บังคับตรวจสิทธิ์ Admin ฝั่ง Database และบันทึก Audit Log
-      const { error } = await supabase.rpc('admin_update_user_role', {
-        p_target_user_id: editingProfile.id,
-        p_new_role: selectedRole,
-        p_department_id: selectedDeptId || null,
-        p_position: positionText.trim() || null,
-        p_is_active: isActiveUser,
-      });
+      const cleanName = editFullName.trim();
+      const cleanPhone = editPhone.trim() || null;
+      const cleanPosition = positionText.trim() || null;
+      const cleanDeptId = selectedDeptId || null;
 
-      if (error) throw error;
+      // 1. อัปเดตข้อมูลโปรไฟล์ทั้งหมดผ่านตาราง profiles (ภายใต้ RLS Policy ของ Admin)
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: cleanName,
+          phone: cleanPhone,
+          position: cleanPosition,
+          department_id: cleanDeptId,
+          role: selectedRole,
+          is_active: isActiveUser,
+        })
+        .eq('id', editingProfile.id);
 
-      toast.success(`อัปเดตบทบาทและข้อมูลของ ${editingProfile.full_name} สำเร็จ`);
+      if (updateError) {
+        // Fallback เรียกใช้ RPC admin_update_user_role
+        const { error: rpcError } = await supabase.rpc('admin_update_user_role', {
+          p_target_user_id: editingProfile.id,
+          p_new_role: selectedRole,
+          p_department_id: cleanDeptId,
+          p_position: cleanPosition,
+          p_is_active: isActiveUser,
+        });
+        if (rpcError) throw rpcError;
+      } else {
+        await recordAuditLog({
+          action: 'USER_UPDATED',
+          entityType: 'profiles',
+          entityId: editingProfile.id,
+          summary: `แก้ไขข้อมูลผู้ใช้งาน ${cleanName} (${editingProfile.email}) สิทธิ์: ${selectedRole}`,
+          beforeData: {
+            full_name: editingProfile.full_name,
+            role: editingProfile.role,
+            department_id: editingProfile.department_id,
+            position: editingProfile.position,
+            phone: editingProfile.phone,
+            is_active: editingProfile.is_active,
+          },
+          afterData: {
+            full_name: cleanName,
+            role: selectedRole,
+            department_id: cleanDeptId,
+            position: cleanPosition,
+            phone: cleanPhone,
+            is_active: isActiveUser,
+          },
+        });
+      }
+
+      if (editingProfile.id === currentUser?.id) {
+        await refreshProfile();
+      }
+
+      toast.success(`บันทึกการแก้ไขข้อมูลของ ${cleanName} สำเร็จ`);
       setEditingProfile(null);
       queryClient.invalidateQueries({ queryKey: ['profiles'] });
       queryClient.invalidateQueries({ queryKey: ['audit-logs-list'] });
@@ -100,6 +181,82 @@ export function UsersAndDepartmentsPage() {
       toast.error(translateSupabaseError(err));
     } finally {
       setIsSavingUser(false);
+    }
+  };
+
+  const handleDeleteUser = async () => {
+    if (!deletingProfile) return;
+
+    if (deletingProfile.id === currentUser?.id) {
+      toast.error('ไม่สามารถลบบัญชีของตนเองที่กำลังเข้าสู่ระบบอยู่ได้');
+      return;
+    }
+
+    setIsDeletingUser(true);
+    try {
+      assertSupabaseConfigured();
+
+      // 1. ลองเรียก RPC admin_delete_user (ลบทั้ง profiles และ auth.users)
+      const { error: rpcError } = await supabase.rpc('admin_delete_user', {
+        p_target_user_id: deletingProfile.id,
+      });
+
+      if (rpcError) {
+        // 2. Fallback ลบจากตาราง profiles โดยตรงหากยังไม่ได้อัปเดตฟังก์ชัน RPC ในฐานข้อมูล
+        const { error: deleteError } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', deletingProfile.id);
+
+        if (deleteError) throw deleteError;
+
+        await recordAuditLog({
+          action: 'USER_DELETED',
+          entityType: 'profiles',
+          entityId: deletingProfile.id,
+          summary: `ลบบัญชีผู้ใช้งาน ${deletingProfile.full_name} (${deletingProfile.email}) ออกจากระบบ`,
+        });
+      }
+
+      toast.success(`ลบผู้ใช้งาน ${deletingProfile.full_name} ออกจากระบบเรียบร้อยแล้ว`);
+      setDeletingProfile(null);
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs-list'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsDeletingUser(false);
+    }
+  };
+
+  const handleSuspendInsteadOfDelete = async () => {
+    if (!deletingProfile) return;
+
+    setIsDeletingUser(true);
+    try {
+      assertSupabaseConfigured();
+      const { error } = await supabase
+        .from('profiles')
+        .update({ is_active: false })
+        .eq('id', deletingProfile.id);
+
+      if (error) throw error;
+
+      await recordAuditLog({
+        action: 'USER_SUSPENDED',
+        entityType: 'profiles',
+        entityId: deletingProfile.id,
+        summary: `ระงับการใช้งานบัญชีผู้ใช้ ${deletingProfile.full_name} (${deletingProfile.email})`,
+      });
+
+      toast.success(`ระงับสิทธิ์การใช้งานของ ${deletingProfile.full_name} เรียบร้อยแล้ว`);
+      setDeletingProfile(null);
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs-list'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsDeletingUser(false);
     }
   };
 
@@ -117,6 +274,7 @@ export function UsersAndDepartmentsPage() {
       const cleanEmail = newUserEmail.trim().toLowerCase();
       const cleanName = newUserFullName.trim();
       const cleanPosition = newUserPosition.trim() || null;
+      const cleanPhone = newUserPhone.trim() || null;
 
       const { data, error } = await isolatedClient.auth.signUp({
         email: cleanEmail,
@@ -132,19 +290,17 @@ export function UsersAndDepartmentsPage() {
       if (error) throw error;
 
       if (data.user) {
-        // อัปเดตชื่อและกำหนดสิทธิ์/หน่วยงานผ่าน RPC ของ Admin
         await supabase
           .from('profiles')
-          .update({ full_name: cleanName })
+          .update({
+            full_name: cleanName,
+            phone: cleanPhone,
+            position: cleanPosition,
+            department_id: newUserDeptId || null,
+            role: newUserRole,
+            is_active: true,
+          })
           .eq('id', data.user.id);
-
-        await supabase.rpc('admin_update_user_role', {
-          p_target_user_id: data.user.id,
-          p_new_role: newUserRole,
-          p_department_id: newUserDeptId || null,
-          p_position: cleanPosition,
-          p_is_active: true,
-        });
 
         await recordAuditLog({
           action: 'USER_CREATED_BY_ADMIN',
@@ -159,6 +315,7 @@ export function UsersAndDepartmentsPage() {
       setNewUserFullName('');
       setNewUserEmail('');
       setNewUserPassword('');
+      setNewUserPhone('');
       setNewUserRole('requester');
       setNewUserDeptId('');
       setNewUserPosition('');
@@ -266,16 +423,21 @@ export function UsersAndDepartmentsPage() {
     <div className="space-y-6">
       <PageHeader
         title="จัดการผู้ใช้ บทบาท หน่วยงาน และสถานที่ตั้ง"
-        subtitle="กำหนดสิทธิ์ผู้ใช้งานผ่านกระบวนการที่ปลอดภัยฝั่งฐานข้อมูล พร้อมจัดการโครงสร้างหน่วยงานและอาคารสถานที่"
+        subtitle="เพิ่ม แก้ไข ระงับ หรือลบบัญชีผู้ใช้งาน พร้อมกำหนดบทบาทสิทธิ์และจัดการโครงสร้างหน่วยงาน"
       />
 
-      {/* คำแนะนำการเชิญผู้ใช้ใหม่ตามหลักความปลอดภัยของ Supabase Auth */}
+      {/* คำแนะนำการจัดการผู้ใช้ */}
       <div className="rounded-xl border border-sky-200 bg-sky-50 p-4 text-xs text-sky-950 flex items-start gap-3">
         <Info className="mt-0.5 h-5 w-5 shrink-0 text-sky-700" />
         <div>
-          <p className="font-bold">แนวปฏิบัติการเพิ่มบุคลากรเข้าสู่ระบบอย่างปลอดภัย:</p>
+          <p className="font-bold">การบริหารจัดการบัญชีบุคลากรและสิทธิ์การเข้าถึง (Admin Controls):</p>
           <p className="mt-0.5 text-sky-900">
-            เพื่อความปลอดภัยสูงสุด ระบบไม่อนุญาตให้ผู้ใช้สมัครเป็น Admin ด้วยตนเองและไม่เก็บ Service Role Key ไว้ใน Front-end การเพิ่มบุคลากรใหม่สามารถทำได้ผ่าน <strong>Supabase Dashboard &gt; Authentication &gt; Users &gt; Invite User</strong> เมื่อผู้ใช้เข้าสู่ระบบครั้งแรก ระบบจะสร้างโปรไฟล์เป็น <code className="rounded bg-sky-200/70 px-1 py-0.5 font-mono">requester</code> โดยอัตโนมัติ จากนั้น Admin สามารถปรับระดับสิทธิ์เป็น <code className="rounded bg-sky-200/70 px-1 py-0.5 font-mono">asset_officer</code> หรือ <code className="rounded bg-sky-200/70 px-1 py-0.5 font-mono">admin</code> ได้ที่ตารางด้านล่าง
+            ผู้ดูแลระบบสามารถกดปุ่ม <strong>+ สร้างบัญชีผู้ใช้งานใหม่</strong> ด้านล่าง หรือกดปุ่ม{' '}
+            <strong>แก้ไข</strong> เพื่อเปลี่ยนชื่อ-นามสกุล เบอร์โทรศัพท์ ตำแหน่ง หน่วยงานสังกัด และระดับสิทธิ์ (
+            <code className="rounded bg-sky-200/70 px-1 py-0.5 font-mono">admin</code>,{' '}
+            <code className="rounded bg-sky-200/70 px-1 py-0.5 font-mono">asset_officer</code>,{' '}
+            <code className="rounded bg-sky-200/70 px-1 py-0.5 font-mono">requester</code>) รวมถึงกดปุ่ม{' '}
+            <strong>ลบ</strong> หรือระงับการใช้งานบัญชีได้ทันที
           </p>
         </div>
       </div>
@@ -358,61 +520,132 @@ export function UsersAndDepartmentsPage() {
       {/* Tab Content */}
       <div className="rounded-b-xl border border-t-0 border-slate-200 bg-white shadow-2xs overflow-hidden">
         {activeTab === 'users' && (
-          loadingProfiles ? (
-            <LoadingState message="กำลังโหลดรายชื่อผู้ใช้งาน..." />
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs font-semibold text-slate-600 border-b border-slate-200">
-                  <tr>
-                    <th className="p-3.5">ชื่อ-นามสกุล</th>
-                    <th className="p-3.5">อีเมล</th>
-                    <th className="p-3.5">ตำแหน่ง</th>
-                    <th className="p-3.5">หน่วยงานสังกัด</th>
-                    <th className="p-3.5">บทบาทสิทธิ์ (Role)</th>
-                    <th className="p-3.5">สถานะบัญชี</th>
-                    <th className="p-3.5 text-right">จัดการสิทธิ์</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 text-xs">
-                  {profiles.map((p) => (
-                    <tr key={p.id} className="hover:bg-slate-50">
-                      <td className="p-3.5 font-semibold text-slate-900">{p.full_name}</td>
-                      <td className="p-3.5 font-mono text-slate-600">{p.email}</td>
-                      <td className="p-3.5 text-slate-600">{p.position || '-'}</td>
-                      <td className="p-3.5 text-slate-600">{p.department?.name || '-'}</td>
-                      <td className="p-3.5">
-                        <StatusBadge
-                          label={ROLE_LABELS[p.role]?.label || p.role}
-                          className={ROLE_LABELS[p.role]?.badgeClass}
-                        />
-                      </td>
-                      <td className="p-3.5">
-                        <StatusBadge
-                          label={p.is_active ? 'ปกติ (Active)' : 'ระงับสิทธิ์'}
-                          className={
-                            p.is_active
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                              : 'bg-rose-50 text-rose-800 border-rose-200'
-                          }
-                        />
-                      </td>
-                      <td className="p-3.5 text-right">
-                        <button
-                          type="button"
-                          onClick={() => openEditUser(p)}
-                          className="inline-flex items-center gap-1 rounded-lg bg-gov-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gov-800"
-                        >
-                          <Edit3 className="h-3.5 w-3.5" />
-                          กำหนดบทบาท
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div>
+            {/* แถบค้นหาและกรองผู้ใช้งาน */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 p-3.5">
+              <div className="relative flex-1 min-w-[240px]">
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  placeholder="ค้นหาชื่อ-นามสกุล, อีเมล, ตำแหน่ง หรือหน่วยงาน..."
+                  className="w-full rounded-lg border border-slate-300 bg-white py-1.5 pl-9 pr-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-gov-600 focus:outline-none"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-slate-600">กรองตามสิทธิ์:</label>
+                <select
+                  value={roleFilter}
+                  onChange={(e) => setRoleFilter(e.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700"
+                >
+                  <option value="all">ทั้งหมด ({profiles.length})</option>
+                  <option value="admin">ผู้ดูแลระบบ (Admin)</option>
+                  <option value="asset_officer">เจ้าหน้าที่พัสดุ (Asset Officer)</option>
+                  <option value="requester">บุคลากรทั่วไป (Requester)</option>
+                </select>
+              </div>
             </div>
-          )
+
+            {loadingProfiles ? (
+              <LoadingState message="กำลังโหลดรายชื่อผู้ใช้งาน..." />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs font-semibold text-slate-600 border-b border-slate-200">
+                    <tr>
+                      <th className="p-3.5">ชื่อ-นามสกุล</th>
+                      <th className="p-3.5">อีเมล / เบอร์โทร</th>
+                      <th className="p-3.5">ตำแหน่ง</th>
+                      <th className="p-3.5">หน่วยงานสังกัด</th>
+                      <th className="p-3.5">บทบาทสิทธิ์ (Role)</th>
+                      <th className="p-3.5">สถานะบัญชี</th>
+                      <th className="p-3.5 text-right">จัดการผู้ใช้งาน</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 text-xs">
+                    {filteredProfiles.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-8 text-center text-slate-500">
+                          ไม่พบข้อมูลผู้ใช้งานที่ตรงกับเงื่อนไขการค้นหา
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredProfiles.map((p) => {
+                        const isSelf = p.id === currentUser?.id;
+                        return (
+                          <tr key={p.id} className="hover:bg-slate-50">
+                            <td className="p-3.5">
+                              <div className="font-semibold text-slate-900">
+                                {p.full_name}
+                                {isSelf && (
+                                  <span className="ml-1.5 rounded bg-gov-100 px-1.5 py-0.5 text-[10px] font-bold text-gov-800">
+                                    คุณ
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3.5">
+                              <div className="font-mono text-slate-700">{p.email}</div>
+                              {p.phone && (
+                                <div className="text-[11px] text-slate-500">โทร: {p.phone}</div>
+                              )}
+                            </td>
+                            <td className="p-3.5 text-slate-600">{p.position || '-'}</td>
+                            <td className="p-3.5 text-slate-600">{p.department?.name || '-'}</td>
+                            <td className="p-3.5">
+                              <StatusBadge
+                                label={ROLE_LABELS[p.role]?.label || p.role}
+                                className={ROLE_LABELS[p.role]?.badgeClass}
+                              />
+                            </td>
+                            <td className="p-3.5">
+                              <StatusBadge
+                                label={p.is_active ? 'ปกติ (Active)' : 'ระงับสิทธิ์'}
+                                className={
+                                  p.is_active
+                                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                    : 'bg-rose-50 text-rose-800 border-rose-200'
+                                }
+                              />
+                            </td>
+                            <td className="p-3.5 text-right">
+                              <div className="inline-flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditUser(p)}
+                                  className="inline-flex items-center gap-1 rounded-lg bg-gov-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-gov-800"
+                                  title="แก้ไขข้อมูลและกำหนดสิทธิ์ผู้ใช้งาน"
+                                >
+                                  <Edit3 className="h-3.5 w-3.5" />
+                                  แก้ไข
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingProfile(p)}
+                                  disabled={isSelf}
+                                  className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-40"
+                                  title={
+                                    isSelf
+                                      ? 'ไม่สามารถลบบัญชีของตนเองได้'
+                                      : 'ลบบัญชีผู้ใช้งานออกจากระบบ'
+                                  }
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                  ลบ
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         )}
 
         {activeTab === 'departments' && (
@@ -531,6 +764,19 @@ export function UsersAndDepartmentsPage() {
               />
             </div>
             <div>
+              <label className="block text-xs font-semibold text-slate-700">เบอร์โทรศัพท์ติดต่อ</label>
+              <input
+                type="text"
+                value={newUserPhone}
+                onChange={(e) => setNewUserPhone(e.target.value)}
+                placeholder="เช่น 081-234-5678"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
               <label className="block text-xs font-semibold text-slate-700">ตำแหน่งราชการ</label>
               <input
                 type="text"
@@ -539,23 +785,6 @@ export function UsersAndDepartmentsPage() {
                 placeholder="เช่น นักวิชาการพัสดุปฏิบัติการ"
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="block text-xs font-semibold text-slate-700">ระดับสิทธิ์ (Role)</label>
-              <select
-                value={newUserRole}
-                onChange={(e) => setNewUserRole(e.target.value as UserRole)}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"
-              >
-                {Object.entries(ROLE_LABELS).map(([key, meta]) => (
-                  <option key={key} value={key}>
-                    {meta.label}
-                  </option>
-                ))}
-              </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700">หน่วยงานสังกัด</label>
@@ -572,6 +801,21 @@ export function UsersAndDepartmentsPage() {
                 ))}
               </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700">ระดับสิทธิ์ (Role)</label>
+            <select
+              value={newUserRole}
+              onChange={(e) => setNewUserRole(e.target.value as UserRole)}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"
+            >
+              {Object.entries(ROLE_LABELS).map(([key, meta]) => (
+                <option key={key} value={key}>
+                  {meta.label} — {meta.description}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
@@ -598,32 +842,45 @@ export function UsersAndDepartmentsPage() {
         </form>
       </Modal>
 
-      {/* Modal กำหนดบทบาทผู้ใช้ */}
+      {/* Modal แก้ไขข้อมูลและกำหนดบทบาทผู้ใช้ */}
       <Modal
         open={Boolean(editingProfile)}
         onClose={() => setEditingProfile(null)}
-        title={`กำหนดสิทธิ์ผู้ใช้งาน: ${editingProfile?.full_name || ''}`}
-        description="การเปลี่ยนแปลงระดับสิทธิ์จะถูกบังคับใช้ใน RLS ทันที และบันทึกประวัติลงใน Audit Log"
+        title={`แก้ไขข้อมูลผู้ใช้งาน: ${editingProfile?.full_name || ''}`}
+        description="แก้ไขข้อมูลส่วนตัว หน่วยงานสังกัด ระดับสิทธิ์ (Role) และสถานะการใช้งานบัญชี"
       >
         {editingProfile && (
           <form onSubmit={handleSaveUserRole} className="space-y-4">
-            <div className="rounded-lg bg-slate-50 p-3 text-xs border border-slate-200">
-              <p>อีเมลผู้ใช้งาน: <strong className="font-mono">{editingProfile.email}</strong></p>
+            <div className="rounded-lg bg-slate-50 p-3 text-xs border border-slate-200 flex items-center justify-between">
+              <span>
+                อีเมลผู้ใช้งาน: <strong className="font-mono">{editingProfile.email}</strong>
+              </span>
+              <span className="text-[11px] text-slate-500">รหัสอ้างอิง: {editingProfile.id.slice(0, 8)}</span>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-700">ระดับสิทธิ์ (Role)</label>
-              <select
-                value={selectedRole}
-                onChange={(e) => setSelectedRole(e.target.value as UserRole)}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"
-              >
-                {Object.entries(ROLE_LABELS).map(([key, meta]) => (
-                  <option key={key} value={key}>
-                    {meta.label} — {meta.description}
-                  </option>
-                ))}
-              </select>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">ชื่อ-นามสกุล *</label>
+                <input
+                  type="text"
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  placeholder="ระบุชื่อ-นามสกุล"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">เบอร์โทรศัพท์ติดต่อ</label>
+                <input
+                  type="text"
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                  placeholder="เช่น 081-234-5678"
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -655,7 +912,22 @@ export function UsersAndDepartmentsPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">ระดับสิทธิ์ (Role)</label>
+              <select
+                value={selectedRole}
+                onChange={(e) => setSelectedRole(e.target.value as UserRole)}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"
+              >
+                {Object.entries(ROLE_LABELS).map(([key, meta]) => (
+                  <option key={key} value={key}>
+                    {meta.label} — {meta.description}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3">
               <input
                 id="user-active"
                 type="checkbox"
@@ -686,10 +958,77 @@ export function UsersAndDepartmentsPage() {
                 ) : (
                   <ShieldCheck className="h-4 w-4" />
                 )}
-                บันทึกการเปลี่ยนสิทธิ์
+                บันทึกการแก้ไขข้อมูล
               </button>
             </div>
           </form>
+        )}
+      </Modal>
+
+      {/* Modal ยืนยันการลบผู้ใช้งาน */}
+      <Modal
+        open={Boolean(deletingProfile)}
+        onClose={() => setDeletingProfile(null)}
+        title="ยืนยันการลบบัญชีผู้ใช้งาน"
+        description="กรุณาตรวจสอบข้อมูลผู้ใช้งานก่อนดำเนินการลบออกจากระบบ"
+        maxWidth="max-w-md"
+      >
+        {deletingProfile && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-900">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+              <div className="space-y-1">
+                <p className="font-bold">คุณกำลังจะลบบัญชีผู้ใช้งานต่อไปนี้:</p>
+                <p>
+                  ชื่อ-นามสกุล: <strong>{deletingProfile.full_name}</strong>
+                </p>
+                <p>
+                  อีเมล: <strong className="font-mono">{deletingProfile.email}</strong>
+                </p>
+                <p>
+                  บทบาท: <strong>{ROLE_LABELS[deletingProfile.role]?.label}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900 leading-relaxed">
+              <strong>หมายเหตุตามระเบียบงานพัสดุ:</strong> หากผู้ใช้งานรายนี้เคยมีประวัติการยืม-คืน แจ้งซ่อม หรือเสนอจำหน่ายครุภัณฑ์ในฐานข้อมูล ระบบฐานข้อมูลอาจไม่อนุญาตให้ลบถาวรเพื่อรักษาหลักฐานการตรวจสอบ แนะนำให้ใช้ปุ่ม{' '}
+              <strong>&ldquo;ระงับการใช้งานบัญชีแทน&rdquo;</strong> เพื่อปิดสิทธิ์การเข้าถึงโดยข้อมูลประวัติเดิมไม่สูญหาย
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setDeletingProfile(null)}
+                disabled={isDeletingUser}
+                className="rounded-lg border border-slate-300 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleSuspendInsteadOfDelete}
+                disabled={isDeletingUser}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+              >
+                <Ban className="h-3.5 w-3.5" />
+                ระงับการใช้งานบัญชีแทน
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteUser}
+                disabled={isDeletingUser}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+              >
+                {isDeletingUser ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                ยืนยันการลบถาวร
+              </button>
+            </div>
+          </div>
         )}
       </Modal>
 
