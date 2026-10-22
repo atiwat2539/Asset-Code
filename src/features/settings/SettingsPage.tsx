@@ -63,6 +63,11 @@ export function SettingsPage() {
   const [catActive, setCatActive] = useState(true);
   const [isSavingCat, setIsSavingCat] = useState(false);
 
+  // สถานะสำหรับลบข้อมูลครุภัณฑ์ทั้งระบบ
+  const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false);
+  const [deleteAllConfirmText, setDeleteAllConfirmText] = useState('');
+  const [isDeletingAllAssets, setIsDeletingAllAssets] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -259,6 +264,60 @@ export function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ['asset_categories'] });
     } catch (err) {
       toast.error(translateSupabaseError(err));
+    }
+  };
+
+  const handleDeleteAllAssets = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (deleteAllConfirmText.trim() !== 'ยืนยันลบทั้งหมด') {
+      toast.error('กรุณาพิมพ์คำว่า "ยืนยันลบทั้งหมด" ให้ถูกต้องก่อนดำเนินการ');
+      return;
+    }
+
+    setIsDeletingAllAssets(true);
+    try {
+      assertSupabaseConfigured();
+      let deletedCount = 0;
+
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('delete_all_assets_system_wide');
+      if (rpcErr) {
+        // Fallback กรณี RPC ยังไม่พร้อมใช้งาน
+        const { count } = await supabase
+          .from('assets')
+          .select('id', { count: 'exact', head: true });
+        deletedCount = count || 0;
+
+        await supabase.from('borrow_transactions').delete().not('id', 'is', null);
+        await supabase.from('borrow_requests').delete().not('id', 'is', null);
+        await supabase.from('maintenance_logs').delete().not('id', 'is', null);
+        await supabase.from('maintenance_requests').delete().not('id', 'is', null);
+        await supabase.from('disposal_requests').delete().not('id', 'is', null);
+        await supabase.from('asset_transfers').delete().not('id', 'is', null);
+        await supabase.from('inventory_items').delete().not('id', 'is', null);
+        await supabase.from('asset_attachments').delete().not('id', 'is', null);
+        const { error: delErr } = await supabase.from('assets').delete().not('id', 'is', null);
+        if (delErr) throw delErr;
+
+        await recordAuditLog({
+          action: 'ALL_ASSETS_DELETED',
+          entityType: 'assets',
+          entityId: 'ALL',
+          summary: `ลบข้อมูลครุภัณฑ์และประวัติธุรกรรมทั้งระบบ จำนวน ${deletedCount} รายการ`,
+        });
+      } else {
+        deletedCount = Number((rpcRes as { deleted_count?: number } | null)?.deleted_count ?? 0);
+      }
+
+      toast.success(`ลบข้อมูลครุภัณฑ์ทั้งระบบสำเร็จ (${deletedCount.toLocaleString('th-TH')} รายการ)`);
+      setIsDeleteAllModalOpen(false);
+      setDeleteAllConfirmText('');
+      queryClient.invalidateQueries({ queryKey: ['assets-list'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['reports-dataset'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsDeletingAllAssets(false);
     }
   };
 
@@ -525,6 +584,36 @@ export function SettingsPage() {
               ))}
             </div>
           </div>
+
+          {/* พื้นที่ควบคุมข้อมูลสำคัญ (Danger Zone) */}
+          <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-5 shadow-2xs space-y-3">
+            <div className="flex items-start gap-2.5">
+              <div className="rounded-lg bg-rose-100 p-2 text-rose-700 shrink-0">
+                <AlertTriangle className="h-4 w-4" />
+              </div>
+              <div className="space-y-1">
+                <h2 className="text-sm font-bold text-rose-900">
+                  การจัดการข้อมูลครุภัณฑ์ทั้งระบบ (Danger Zone)
+                </h2>
+                <p className="text-xs leading-relaxed text-rose-700/90">
+                  ใช้สำหรับล้างข้อมูลรายการครุภัณฑ์ทั้งหมดในระบบ พร้อมประวัติการยืม-คืน การแจ้งซ่อม การโอนย้าย และการตรวจนับพัสดุที่เกี่ยวข้อง (ไม่สามารถกู้คืนได้)
+                </p>
+              </div>
+            </div>
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteAllConfirmText('');
+                  setIsDeleteAllModalOpen(true);
+                }}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-rose-300 bg-rose-600 px-4 py-2.5 text-xs font-semibold text-white shadow-2xs transition hover:bg-rose-700"
+              >
+                <Trash2 className="h-4 w-4" />
+                ลบข้อมูลครุภัณฑ์ทั้งระบบ
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -623,6 +712,72 @@ export function SettingsPage() {
         description={`คุณต้องการลบหมวดหมู่ "${deletingCat?.code} - ${deletingCat?.name}" ออกจากระบบใช่หรือไม่? (หากมีครุภัณฑ์ผูกกับหมวดหมู่นี้อยู่ ระบบอาจไม่อนุญาตให้ลบ)`}
         confirmLabel="ยืนยันลบหมวดหมู่"
       />
+
+      {/* Modal ยืนยันการลบข้อมูลครุภัณฑ์ทั้งระบบ */}
+      <Modal
+        open={isDeleteAllModalOpen}
+        onClose={() => {
+          if (!isDeletingAllAssets) {
+            setIsDeleteAllModalOpen(false);
+            setDeleteAllConfirmText('');
+          }
+        }}
+        title="ยืนยันการลบข้อมูลครุภัณฑ์ทั้งระบบ"
+        description="การดำเนินการนี้จะลบรายการครุภัณฑ์ทั้งหมดในฐานข้อมูลอย่างถาวร"
+        maxWidth="max-w-md"
+      >
+        <form onSubmit={handleDeleteAllAssets} className="space-y-4">
+          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-800 space-y-1.5">
+            <p className="font-bold flex items-center gap-1.5 text-rose-900">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-rose-600" />
+              คำเตือนสำคัญ: ข้อมูลที่ถูกลบจะไม่สามารถกู้คืนได้
+            </p>
+            <p className="leading-relaxed">
+              ระบบจะทำการลบข้อมูลทะเบียนครุภัณฑ์ทุกรายการ รวมถึงประวัติการยืม-คืน ประวัติการแจ้งซ่อม การโอนย้าย การจำหน่าย และการตรวจนับพัสดุที่ผูกกับครุภัณฑ์ทั้งหมด (ข้อมูลหน่วยงาน อาคาร ผู้ใช้งาน และหมวดหมู่มาตรฐานจะยังคงอยู่)
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700">
+              พิมพ์คำว่า <span className="font-bold text-rose-600 select-all">ยืนยันลบทั้งหมด</span> เพื่อยืนยันการดำเนินการ
+            </label>
+            <input
+              type="text"
+              value={deleteAllConfirmText}
+              onChange={(e) => setDeleteAllConfirmText(e.target.value)}
+              placeholder="ยืนยันลบทั้งหมด"
+              disabled={isDeletingAllAssets}
+              className="mt-1.5 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-rose-500 focus:ring-2 focus:ring-rose-500/20"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+            <button
+              type="button"
+              disabled={isDeletingAllAssets}
+              onClick={() => {
+                setIsDeleteAllModalOpen(false);
+                setDeleteAllConfirmText('');
+              }}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={isDeletingAllAssets || deleteAllConfirmText.trim() !== 'ยืนยันลบทั้งหมด'}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-4 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-50"
+            >
+              {isDeletingAllAssets ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              ยืนยันลบครุภัณฑ์ทั้งระบบ
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

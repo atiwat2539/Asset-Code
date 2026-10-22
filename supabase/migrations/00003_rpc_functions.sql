@@ -593,3 +593,44 @@ BEGIN
   RETURN jsonb_build_object('success', TRUE, 'deleted_asset_id', p_asset_id);
 END;
 $$;
+
+-- 8. RPC: ลบข้อมูลครุภัณฑ์ทั้งระบบพร้อมประวัติธุรกรรมที่เกี่ยวข้อง (เฉพาะ Admin)
+CREATE OR REPLACE FUNCTION public.delete_all_assets_system_wide()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_count INTEGER := 0;
+BEGIN
+  IF NOT public.is_admin() THEN
+    RAISE EXCEPTION 'เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่มีสิทธิ์ลบข้อมูลครุภัณฑ์ทั้งระบบ';
+  END IF;
+
+  SELECT COUNT(*)::INTEGER INTO v_count FROM public.assets;
+
+  DELETE FROM public.borrow_transactions WHERE TRUE;
+  DELETE FROM public.borrow_requests WHERE TRUE;
+  DELETE FROM public.maintenance_logs WHERE TRUE;
+  DELETE FROM public.maintenance_requests WHERE TRUE;
+  DELETE FROM public.disposal_requests WHERE TRUE;
+  DELETE FROM public.asset_transfers WHERE TRUE;
+  DELETE FROM public.inventory_items WHERE TRUE;
+  DELETE FROM public.asset_attachments WHERE TRUE;
+  DELETE FROM public.assets WHERE TRUE;
+
+  PERFORM public.write_audit_log(
+    'ALL_ASSETS_DELETED',
+    'assets',
+    'ALL',
+    format('ลบข้อมูลครุภัณฑ์และประวัติธุรกรรมทั้งระบบ จำนวน %s รายการ', v_count),
+    jsonb_build_object('deleted_count', v_count),
+    NULL
+  );
+
+  RETURN jsonb_build_object('success', TRUE, 'deleted_count', v_count);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.delete_all_assets_system_wide() TO authenticated;

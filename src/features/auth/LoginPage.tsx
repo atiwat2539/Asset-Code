@@ -342,26 +342,39 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-between bg-gradient-to-br from-gov-900 via-gov-800 to-slate-900 text-slate-900">
+    <div className="relative min-h-screen flex flex-col justify-between overflow-hidden bg-gradient-to-br from-[#F4F1FA] via-[#EDEAF7] to-[#F7F3EE] text-slate-900">
+      {/* เลเยอร์แสงสีพาสเทล PANTONE แบบจางและนุ่มนวล */}
+      <div className="pointer-events-none absolute -top-28 -left-24 h-96 w-96 rounded-full bg-[#C1B7E4]/40 blur-3xl" />
+      <div className="pointer-events-none absolute top-1/3 -right-24 h-96 w-96 rounded-full bg-[#FFBE98]/35 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-28 left-1/3 h-96 w-96 rounded-full bg-[#92A8D1]/35 blur-3xl" />
+
+      {/* เลเยอร์พื้นผิวแบบ Grain (Fine Film/Paper Noise Texture) */}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.28] mix-blend-multiply"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='grainFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grainFilter)' opacity='0.55'/%3E%3C/svg%3E")`,
+        }}
+      />
+
       {/* แถบแจ้งสถานะด้านบน */}
-      <div className="w-full border-b border-white/10 bg-slate-950/40 px-4 py-2.5 text-xs text-slate-200">
+      <div className="relative z-10 w-full border-b border-[#DCD6F0]/80 bg-white/65 backdrop-blur-md px-4 py-2.5 text-xs text-slate-700 shadow-2xs">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-sky-400" />
-            <span>ระบบสารสนเทศเพื่อการบริหารจัดการครุภัณฑ์สำนักงาน หน่วยงานราชการไทย</span>
+            <Building2 className="h-4 w-4 text-gov-700" />
+            <span className="font-medium text-gov-900">ระบบสารสนเทศเพื่อการบริหารจัดการครุภัณฑ์สำนักงาน</span>
           </div>
           <div className="flex items-center gap-3">
             {configured ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-0.5 text-emerald-300 border border-emerald-400/30">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#E2F1EA] px-2.5 py-0.5 text-[#3E7A5D] border border-[#C3E0D2] font-medium">
                 <CheckCircle2 className="h-3.5 w-3.5" /> เชื่อมต่อ Supabase พร้อมใช้งาน
               </span>
             ) : (
               <button
                 type="button"
                 onClick={() => setOpenSetupModal(true)}
-                className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/20 px-3 py-1 text-amber-200 border border-amber-400/40 hover:bg-amber-500/30"
+                className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3 py-1 text-amber-800 border border-amber-300 hover:bg-amber-200/70"
               >
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
+                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
                 ยังไม่ได้ตั้งค่า Supabase — คลิกดูวิธีตั้งค่า
               </button>
             )}
@@ -370,20 +383,20 @@ export function LoginPage() {
       </div>
 
       {/* กล่องหลัก */}
-      <div className="flex flex-1 items-center justify-center p-4 sm:p-6">
-        <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200">
-          <div className="bg-gov-800 px-6 py-6 text-center text-white">
-            <div className="mx-auto inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 shadow-lg ring-2 ring-white/30 transition-transform duration-300 hover:scale-105">
+      <div className="relative z-10 flex flex-1 items-center justify-center p-4 sm:p-6">
+        <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white/90 backdrop-blur-md shadow-xl shadow-[#6667AB]/10 border border-[#DCD6F0]">
+          <div className="bg-gradient-to-br from-[#EDEAF7] via-[#F4F1FA] to-[#FBF5F0] border-b border-[#DCD6F0]/70 px-6 py-6 text-center text-gov-900">
+            <div className="mx-auto inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 shadow-md shadow-[#6667AB]/10 ring-1 ring-[#DCD6F0] transition-transform duration-300 hover:scale-105">
               <img
                 src="/cmu-library-logo.png"
                 alt="CMU Library Logo"
                 className="h-14 w-auto object-contain"
               />
             </div>
-            <h1 className="mt-3.5 text-xl font-bold tracking-tight">
+            <h1 className="mt-3.5 text-xl font-bold tracking-tight text-[#3E305E]">
               ระบบบริหารจัดการครุภัณฑ์สำนักงาน
             </h1>
-            <p className="mt-1 text-xs text-sky-100/80">
+            <p className="mt-1 text-xs font-medium text-[#6667AB]">
               CMU Library Asset Management System
             </p>
           </div>
@@ -906,8 +919,8 @@ export function LoginPage() {
         </div>
       </div>
 
-      <footer className="py-4 text-center text-xs text-slate-400">
-        ระบบบริหารจัดการครุภัณฑ์สำนักงานหน่วยงานราชการ &bull; รองรับมาตรฐานความปลอดภัยข้อมูลและ Row Level Security
+      <footer className="relative z-10 py-4 text-center text-xs text-slate-500">
+        สำนักหอสมุด มหาวิทยาลัยเชียงใหม่ &bull; ระบบสารสนเทศเพื่อการบริหารจัดการครุภัณฑ์สำนักงาน
       </footer>
 
       <SetupGuideModal open={openSetupModal} onClose={() => setOpenSetupModal(false)} />
