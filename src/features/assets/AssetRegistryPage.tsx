@@ -62,9 +62,14 @@ const assetFormSchema = z.object({
   serial_number: z.string().optional(),
   description: z.string().optional(),
   unit_price: z.coerce.number().min(0, 'ราคาต่อหน่วยต้องไม่ติดลบ'),
-  acquired_date: z.string().optional(),
+  acquired_date: z
+    .preprocess((val) => (val === null || val === undefined ? '' : String(val).trim()), z.string().optional()),
   contract_number: z.string().optional(),
-  useful_life_years: z.coerce.number().min(1).max(50).optional(),
+  useful_life_years: z
+    .preprocess(
+      (val) => (val === '' || val === null || val === undefined || Number.isNaN(Number(val)) ? 5 : Number(val)),
+      z.number().min(1).max(50).optional()
+    ),
   status: z.enum(['available', 'borrowed', 'under_maintenance', 'pending_disposal', 'disposed', 'lost']),
   department_id: z.string().min(1, 'กรุณาเลือกหน่วยงานผู้ครอบครอง'),
   location_id: z.string().optional(),
@@ -231,6 +236,8 @@ export function AssetRegistryPage() {
     register,
     handleSubmit,
     reset,
+    watch,
+    setValue,
     formState: { errors, isSubmitting },
   } = useForm<AssetFormValues>({
     resolver: zodResolver(assetFormSchema),
@@ -735,7 +742,12 @@ export function AssetRegistryPage() {
           row['ราคาต่อหน่วย (บาท)'] || row['ราคาต่อหน่วย'] || row['ราคาทุน'] || row['unit_price'] || 0
         );
         const rawAcquiredDate =
-          row['วันที่รับเข้า / วันที่ตรวจรับ'] || row['วันที่รับเข้า'] || row['วันที่ได้มา'] || row['acquired_date'] || '';
+          row['วันที่รับเข้า / วันที่ตรวจรับ'] ||
+          row['วันที่รับเข้า / วันที่ตรวจรับ (ไม่บังคับ)'] ||
+          row['วันที่รับเข้า'] ||
+          row['วันที่ได้มา'] ||
+          row['acquired_date'] ||
+          '';
         const acquired_date = normalizeToISODate(rawAcquiredDate as string | number);
         const contract_number = String(
           row['เลขที่สัญญาจัดซื้อ / ใบตรวจรับ'] || row['เลขที่สัญญา'] || row['contract_number'] || ''
@@ -1483,7 +1495,7 @@ export function AssetRegistryPage() {
         description="กรอกรายละเอียดครุภัณฑ์ตามใบตรวจรับพัสดุ เลขครุภัณฑ์ต้องไม่ซ้ำกับที่มีในระบบ"
         maxWidth="max-w-3xl"
       >
-        <form onSubmit={handleSubmit(onSubmitAsset)} className="space-y-4">
+        <form onSubmit={handleSubmit(onSubmitAsset)} noValidate className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-semibold text-slate-700">
@@ -1597,11 +1609,23 @@ export function AssetRegistryPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-700">
-                วันที่รับเข้า / วันที่ตรวจรับ <span className="text-slate-400 font-normal">(ไม่บังคับ)</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700">
+                  วันที่รับเข้า / วันที่ตรวจรับ <span className="text-slate-400 font-normal">(ไม่บังคับ)</span>
+                </label>
+                {watch('acquired_date') && (
+                  <button
+                    type="button"
+                    onClick={() => setValue('acquired_date', '', { shouldValidate: true, shouldDirty: true })}
+                    className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline"
+                  >
+                    ล้างวันที่
+                  </button>
+                )}
+              </div>
               <input
                 type="date"
+                required={false}
                 {...register('acquired_date')}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />

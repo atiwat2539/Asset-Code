@@ -88,6 +88,7 @@ export function AssetDetailPage() {
     model: '',
     serial_number: '',
     unit_price: 0,
+    acquired_date: '',
     status: 'available' as AssetStatus,
     department_id: '',
     location_id: '',
@@ -267,6 +268,7 @@ export function AssetDetailPage() {
       model: a.model || '',
       serial_number: a.serial_number || '',
       unit_price: Number(a.unit_price || 0),
+      acquired_date: a.acquired_date || '',
       status: a.status,
       department_id: a.department_id || '',
       location_id: a.location_id || '',
@@ -296,6 +298,7 @@ export function AssetDetailPage() {
           model: editForm.model.trim() || null,
           serial_number: editForm.serial_number.trim() || null,
           unit_price: Number(editForm.unit_price || 0),
+          acquired_date: editForm.acquired_date.trim() || null,
           status: editForm.status,
           department_id: editForm.department_id || null,
           location_id: editForm.location_id || null,
@@ -987,7 +990,7 @@ export function AssetDetailPage() {
         title={`แก้ไขข้อมูลครุภัณฑ์: ${asset.asset_code}`}
         maxWidth="max-w-2xl"
       >
-        <form onSubmit={handleSaveEditAsset} className="space-y-4">
+        <form onSubmit={handleSaveEditAsset} noValidate className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-semibold text-slate-700">เลขครุภัณฑ์ *</label>
@@ -1070,6 +1073,29 @@ export function AssetDetailPage() {
                 step="0.01"
                 value={editForm.unit_price}
                 onChange={(e) => setEditForm({ ...editForm, unit_price: Number(e.target.value) })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700">
+                  วันที่รับเข้า / วันที่ตรวจรับ <span className="text-slate-400 font-normal">(ไม่บังคับ)</span>
+                </label>
+                {editForm.acquired_date && (
+                  <button
+                    type="button"
+                    onClick={() => setEditForm({ ...editForm, acquired_date: '' })}
+                    className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline"
+                  >
+                    ล้างวันที่
+                  </button>
+                )}
+              </div>
+              <input
+                type="date"
+                required={false}
+                value={editForm.acquired_date}
+                onChange={(e) => setEditForm({ ...editForm, acquired_date: e.target.value })}
                 className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
             </div>

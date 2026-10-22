@@ -131,6 +131,11 @@ export function AppLayout() {
         'input[type="date"], input[type="datetime-local"]'
       );
       inputs.forEach((input) => {
+        // ป้องกันกรณีผู้ใช้ลบวันที่บางส่วน (เช่น ลบเฉพาะวัน/เดือน) แล้ว Browser ค้างสถานะ badInput ทำให้ส่งฟอร์มไม่ผ่านทั้งที่ช่องดูเหมือนว่าง
+        if (!input.value && input.validity?.badInput && document.activeElement !== input) {
+          input.value = '';
+        }
+
         const val = input.value;
         if (!val) {
           const placeholder =
@@ -158,15 +163,33 @@ export function AppLayout() {
       });
     };
 
+    const handleDateKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLInputElement | null;
+      if (
+        target &&
+        target.tagName === 'INPUT' &&
+        (target.type === 'date' || target.type === 'datetime-local') &&
+        (e.key === 'Backspace' || e.key === 'Delete')
+      ) {
+        e.preventDefault();
+        target.value = '';
+        target.dispatchEvent(new Event('input', { bubbles: true }));
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+        syncAllDateInputs();
+      }
+    };
+
     syncAllDateInputs();
     const timer = window.setInterval(syncAllDateInputs, 250);
     document.addEventListener('input', syncAllDateInputs, true);
     document.addEventListener('change', syncAllDateInputs, true);
+    document.addEventListener('keydown', handleDateKeyDown, true);
 
     return () => {
       window.clearInterval(timer);
       document.removeEventListener('input', syncAllDateInputs, true);
       document.removeEventListener('change', syncAllDateInputs, true);
+      document.removeEventListener('keydown', handleDateKeyDown, true);
     };
   }, []);
 
