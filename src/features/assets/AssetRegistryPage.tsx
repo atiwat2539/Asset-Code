@@ -99,6 +99,7 @@ interface ImportPreviewRow {
   custodian_id?: string;
 }
 
+// ชุดสีการ์ดครุภัณฑ์และ Hover Effect โทน PANTONE แบ่งตามสถานะ
 const CARD_STATUS_THEME: Record<
   AssetStatus,
   {
@@ -110,46 +111,58 @@ const CARD_STATUS_THEME: Record<
   }
 > = {
   available: {
-    cardBorder: 'border-emerald-200/90 hover:border-emerald-400 hover:shadow-emerald-500/15',
-    topBar: 'from-emerald-500 via-teal-500 to-emerald-400',
-    headerBg: 'from-emerald-50/70 via-teal-50/30 to-white',
-    iconBg: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
-    priceColor: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+    // PANTONE Greenery / Biscay Sage (#5B9E7D)
+    cardBorder:
+      'border-[#CFE6DA] hover:border-[#5B9E7D] hover:bg-gradient-to-b hover:from-[#F4FAF7] hover:to-white hover:shadow-xl hover:shadow-[#5B9E7D]/20',
+    topBar: 'from-[#5B9E7D] via-[#4C9A8A] to-[#88B04B]',
+    headerBg: 'from-[#F2F8F5] via-[#F8FCFA] to-white',
+    iconBg: 'bg-[#E2F1EA] text-[#3E7A5D] ring-[#C3E0D2]',
+    priceColor: 'text-[#3E7A5D] bg-[#F2F8F5] border-[#C3E0D2]',
   },
   borrowed: {
-    cardBorder: 'border-sky-200/90 hover:border-sky-400 hover:shadow-sky-500/15',
-    topBar: 'from-sky-500 via-blue-500 to-cyan-400',
-    headerBg: 'from-sky-50/70 via-blue-50/30 to-white',
-    iconBg: 'bg-sky-100 text-sky-700 ring-sky-200',
-    priceColor: 'text-sky-700 bg-sky-50 border-sky-200',
+    // PANTONE 15-3919 Serenity (#6F9FD8 / #92A8D1)
+    cardBorder:
+      'border-[#D4E2F4] hover:border-[#6F9FD8] hover:bg-gradient-to-b hover:from-[#F3F7FC] hover:to-white hover:shadow-xl hover:shadow-[#6F9FD8]/20',
+    topBar: 'from-[#6F9FD8] via-[#92A8D1] to-[#6667AB]',
+    headerBg: 'from-[#F3F7FC] via-[#F8FAFD] to-white',
+    iconBg: 'bg-[#E4ECF7] text-[#4372AA] ring-[#C7D8EE]',
+    priceColor: 'text-[#4372AA] bg-[#F3F7FC] border-[#C7D8EE]',
   },
   under_maintenance: {
-    cardBorder: 'border-amber-200/90 hover:border-amber-400 hover:shadow-amber-500/15',
-    topBar: 'from-amber-500 via-orange-500 to-yellow-400',
-    headerBg: 'from-amber-50/70 via-orange-50/30 to-white',
-    iconBg: 'bg-amber-100 text-amber-700 ring-amber-200',
-    priceColor: 'text-amber-800 bg-amber-50 border-amber-200',
+    // PANTONE 13-1023 Peach Fuzz / Warm Apricot (#E2875A / #FFBE98)
+    cardBorder:
+      'border-[#F5D9C8] hover:border-[#E2875A] hover:bg-gradient-to-b hover:from-[#FDF6F2] hover:to-white hover:shadow-xl hover:shadow-[#E2875A]/20',
+    topBar: 'from-[#E2875A] via-[#E89968] to-[#FFBE98]',
+    headerBg: 'from-[#FDF6F2] via-[#FEFAF7] to-white',
+    iconBg: 'bg-[#FBE9DF] text-[#B85E32] ring-[#F3D0BC]',
+    priceColor: 'text-[#B85E32] bg-[#FDF6F2] border-[#F3D0BC]',
   },
   pending_disposal: {
-    cardBorder: 'border-orange-200/90 hover:border-orange-400 hover:shadow-orange-500/15',
-    topBar: 'from-orange-500 via-amber-600 to-red-400',
-    headerBg: 'from-orange-50/70 via-amber-50/30 to-white',
-    iconBg: 'bg-orange-100 text-orange-700 ring-orange-200',
-    priceColor: 'text-orange-800 bg-orange-50 border-orange-200',
+    // PANTONE 18-3838 Ultra Violet / Very Peri (#5F4B8B / #6667AB)
+    cardBorder:
+      'border-[#DCD6F0] hover:border-[#6667AB] hover:bg-gradient-to-b hover:from-[#F6F5FB] hover:to-white hover:shadow-xl hover:shadow-[#6667AB]/20',
+    topBar: 'from-[#5F4B8B] via-[#6667AB] to-[#9E91D3]',
+    headerBg: 'from-[#F6F5FB] via-[#FAF9FD] to-white',
+    iconBg: 'bg-[#EDEAF7] text-[#5F4B8B] ring-[#DCD6F0]',
+    priceColor: 'text-[#5F4B8B] bg-[#F6F5FB] border-[#DCD6F0]',
   },
   disposed: {
-    cardBorder: 'border-slate-300 hover:border-slate-400 hover:shadow-slate-500/15',
-    topBar: 'from-slate-500 via-slate-600 to-slate-400',
-    headerBg: 'from-slate-100/80 via-slate-50/40 to-white',
-    iconBg: 'bg-slate-200 text-slate-600 ring-slate-300',
-    priceColor: 'text-slate-700 bg-slate-100 border-slate-300',
+    // PANTONE 17-1230 Mocha Mousse / Warm Taupe (#A47864)
+    cardBorder:
+      'border-[#E2D6D0] hover:border-[#A47864] hover:bg-gradient-to-b hover:from-[#FAF6F4] hover:to-white hover:shadow-xl hover:shadow-[#A47864]/20',
+    topBar: 'from-[#8C6D5E] via-[#A47864] to-[#C9A99A]',
+    headerBg: 'from-[#F7F3F0] via-[#FAF8F6] to-white',
+    iconBg: 'bg-[#EFE6E1] text-[#7D5644] ring-[#DECBC2]',
+    priceColor: 'text-[#7D5644] bg-[#FAF6F4] border-[#DECBC2]',
   },
   lost: {
-    cardBorder: 'border-rose-200/90 hover:border-rose-400 hover:shadow-rose-500/15',
-    topBar: 'from-rose-500 via-red-500 to-pink-500',
-    headerBg: 'from-rose-50/70 via-pink-50/30 to-white',
-    iconBg: 'bg-rose-100 text-rose-700 ring-rose-200',
-    priceColor: 'text-rose-700 bg-rose-50 border-rose-200',
+    // PANTONE 16-1546 Living Coral / Rose Quartz (#E06D79 / #F7CAC9)
+    cardBorder:
+      'border-[#F5D2D6] hover:border-[#E06D79] hover:bg-gradient-to-b hover:from-[#FDF4F5] hover:to-white hover:shadow-xl hover:shadow-[#E06D79]/20',
+    topBar: 'from-[#E06D79] via-[#E8858F] to-[#F7CAC9]',
+    headerBg: 'from-[#FDF4F5] via-[#FEF9F9] to-white',
+    iconBg: 'bg-[#F9E5E6] text-[#B84754] ring-[#F2C6CA]',
+    priceColor: 'text-[#B84754] bg-[#FDF4F5] border-[#F2C6CA]',
   },
 };
 

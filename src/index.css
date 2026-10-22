@@ -13,6 +13,15 @@
     background-color: #DCD6F0; /* PANTONE Orchid Ice */
     color: #2E2348;
   }
+
+  /* เอฟเฟกต์เมื่อวางเมาส์ (Hover) บนแถวตารางในระบบให้เป็นโทน PANTONE Lavender Mist / Peach Fuzz */
+  tbody tr {
+    transition: background-color 0.18s ease, box-shadow 0.18s ease;
+  }
+
+  tbody tr:hover {
+    background-image: linear-gradient(90deg, rgba(237, 234, 247, 0.72) 0%, rgba(253, 246, 242, 0.55) 100%) !important;
+  }
 }
 
 /* แสดงวันที่ใน <input type="date"> และ <input type="datetime-local"> เป็นรูปแบบ พ.ศ. ไทยทั้งหมด */

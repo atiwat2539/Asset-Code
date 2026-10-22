@@ -255,66 +255,72 @@ export function DashboardPage() {
       value: `${formatNumber(dashboardData.totalAssets)} รายการ`,
       sub: `พร้อมใช้งาน ${formatNumber(dashboardData.availableCount)} รายการ`,
       icon: Package,
-      color: 'bg-gov-700 text-white shadow-gov-700/30',
+      // PANTONE 17-3938 Very Peri
+      color: 'bg-[#6667AB] text-white shadow-[#6667AB]/30',
       hoverCard:
-        'hover:border-gov-400 hover:bg-gradient-to-br hover:from-white hover:via-gov-50/70 hover:to-sky-100/60 hover:shadow-xl hover:shadow-gov-600/15',
-      topBar: 'from-gov-600 to-sky-500',
-      valueHover: 'group-hover:text-gov-800',
+        'hover:border-[#9E91D3] hover:bg-gradient-to-br hover:from-white hover:via-[#F6F5FB] hover:to-[#EDEAF7] hover:shadow-xl hover:shadow-[#6667AB]/20',
+      topBar: 'from-[#5F4B8B] via-[#6667AB] to-[#92A8D1]',
+      valueHover: 'group-hover:text-[#5F4B8B]',
     },
     {
       label: 'มูลค่าครุภัณฑ์รวม (ไม่รวมจำหน่าย)',
       value: formatCurrency(dashboardData.totalValue),
       sub: 'คำนวณตามราคาทุนที่ขึ้นทะเบียน',
       icon: Banknote,
-      color: 'bg-emerald-600 text-white shadow-emerald-600/30',
+      // PANTONE Greenery / Sage
+      color: 'bg-[#5B9E7D] text-white shadow-[#5B9E7D]/30',
       hoverCard:
-        'hover:border-emerald-400 hover:bg-gradient-to-br hover:from-white hover:via-emerald-50/80 hover:to-teal-100/60 hover:shadow-xl hover:shadow-emerald-600/15',
-      topBar: 'from-emerald-500 to-teal-400',
-      valueHover: 'group-hover:text-emerald-700',
+        'hover:border-[#88B04B]/60 hover:bg-gradient-to-br hover:from-white hover:via-[#F2F8F5] hover:to-[#E1EFE8] hover:shadow-xl hover:shadow-[#5B9E7D]/20',
+      topBar: 'from-[#5B9E7D] to-[#88B04B]',
+      valueHover: 'group-hover:text-[#3E7A5D]',
     },
     {
       label: 'ครุภัณฑ์พร้อมใช้งาน',
       value: `${formatNumber(dashboardData.availableCount)} รายการ`,
       sub: 'สามารถเบิก/ขอยืมปฏิบัติงานได้',
       icon: CheckCircle2,
-      color: 'bg-teal-600 text-white shadow-teal-600/30',
+      // PANTONE Biscay Green / Teal Sage
+      color: 'bg-[#4C9A8A] text-white shadow-[#4C9A8A]/30',
       hoverCard:
-        'hover:border-teal-400 hover:bg-gradient-to-br hover:from-white hover:via-teal-50/80 hover:to-cyan-100/60 hover:shadow-xl hover:shadow-teal-600/15',
-      topBar: 'from-teal-500 to-cyan-400',
-      valueHover: 'group-hover:text-teal-700',
+        'hover:border-[#7BB8AC] hover:bg-gradient-to-br hover:from-white hover:via-[#F0F8F6] hover:to-[#DFF0EC] hover:shadow-xl hover:shadow-[#4C9A8A]/20',
+      topBar: 'from-[#4C9A8A] to-[#7BB8AC]',
+      valueHover: 'group-hover:text-[#377B6D]',
     },
     {
       label: 'ครุภัณฑ์ที่กำลังถูกยืม',
       value: `${formatNumber(dashboardData.borrowedCount)} รายการ`,
       sub: 'อยู่ระหว่างการยืมใช้งานราชการ',
       icon: Repeat,
-      color: 'bg-sky-600 text-white shadow-sky-600/30',
+      // PANTONE 15-3919 Serenity
+      color: 'bg-[#6F9FD8] text-white shadow-[#6F9FD8]/30',
       hoverCard:
-        'hover:border-sky-400 hover:bg-gradient-to-br hover:from-white hover:via-sky-50/80 hover:to-blue-100/60 hover:shadow-xl hover:shadow-sky-600/15',
-      topBar: 'from-sky-500 to-blue-500',
-      valueHover: 'group-hover:text-sky-700',
+        'hover:border-[#92A8D1] hover:bg-gradient-to-br hover:from-white hover:via-[#F3F7FC] hover:to-[#E4ECF7] hover:shadow-xl hover:shadow-[#6F9FD8]/20',
+      topBar: 'from-[#6F9FD8] to-[#92A8D1]',
+      valueHover: 'group-hover:text-[#4372AA]',
     },
     {
       label: 'อยู่ระหว่างซ่อมบำรุง',
       value: `${formatNumber(dashboardData.maintenanceCount)} รายการ`,
       sub: `ใบแจ้งซ่อมคงค้าง ${dashboardData.activeMaintenanceTickets} ใบ`,
       icon: Wrench,
-      color: 'bg-amber-600 text-white shadow-amber-600/30',
+      // PANTONE 13-1023 Peach Fuzz / Warm Apricot
+      color: 'bg-[#E2875A] text-white shadow-[#E2875A]/30',
       hoverCard:
-        'hover:border-amber-400 hover:bg-gradient-to-br hover:from-white hover:via-amber-50/80 hover:to-orange-100/60 hover:shadow-xl hover:shadow-amber-600/15',
-      topBar: 'from-amber-500 to-orange-400',
-      valueHover: 'group-hover:text-amber-700',
+        'hover:border-[#FFBE98] hover:bg-gradient-to-br hover:from-white hover:via-[#FDF6F2] hover:to-[#FBE9DF] hover:shadow-xl hover:shadow-[#E2875A]/20',
+      topBar: 'from-[#E2875A] to-[#FFBE98]',
+      valueHover: 'group-hover:text-[#B85E32]',
     },
     {
       label: 'คำขอที่รออนุมัติรวม',
       value: `${formatNumber(dashboardData.pendingApprovals)} รายการ`,
       sub: 'ยืม-คืน / โอนย้าย / แทงจำหน่าย',
       icon: Clock,
-      color: 'bg-rose-600 text-white shadow-rose-600/30',
+      // PANTONE 16-1546 Living Coral / Rose Quartz
+      color: 'bg-[#E06D79] text-white shadow-[#E06D79]/30',
       hoverCard:
-        'hover:border-rose-400 hover:bg-gradient-to-br hover:from-white hover:via-rose-50/80 hover:to-pink-100/60 hover:shadow-xl hover:shadow-rose-600/15',
-      topBar: 'from-rose-500 to-pink-500',
-      valueHover: 'group-hover:text-rose-700',
+        'hover:border-[#F7CAC9] hover:bg-gradient-to-br hover:from-white hover:via-[#FDF4F5] hover:to-[#F9E5E6] hover:shadow-xl hover:shadow-[#E06D79]/20',
+      topBar: 'from-[#E06D79] to-[#F7CAC9]',
+      valueHover: 'group-hover:text-[#B84754]',
     },
     {
       label: 'รอบตรวจนับที่กำลังดำเนินการ',
@@ -323,49 +329,51 @@ export function DashboardPage() {
         dashboardData.activeInventorySessions[0]?.session_code ||
         'ไม่มีรอบตรวจนับที่ค้างอยู่',
       icon: ClipboardCheck,
-      color: 'bg-purple-600 text-white shadow-purple-600/30',
+      // PANTONE 18-3838 Ultra Violet
+      color: 'bg-[#5F4B8B] text-white shadow-[#5F4B8B]/30',
       hoverCard:
-        'hover:border-purple-400 hover:bg-gradient-to-br hover:from-white hover:via-purple-50/80 hover:to-fuchsia-100/60 hover:shadow-xl hover:shadow-purple-600/15',
-      topBar: 'from-purple-500 to-fuchsia-500',
-      valueHover: 'group-hover:text-purple-700',
+        'hover:border-[#C1B7E4] hover:bg-gradient-to-br hover:from-white hover:via-[#F6F5FB] hover:to-[#E9E4F5] hover:shadow-xl hover:shadow-[#5F4B8B]/20',
+      topBar: 'from-[#5F4B8B] to-[#9E91D3]',
+      valueHover: 'group-hover:text-[#49386E]',
     },
     {
       label: 'กิจกรรมที่กำลังจะมาถึง',
       value: `${formatNumber(dashboardData.upcomingEvents.length)} กิจกรรม`,
       sub: 'ปฏิทินงานพัสดุและองค์กร',
       icon: CalendarDays,
-      color: 'bg-indigo-600 text-white shadow-indigo-600/30',
+      // PANTONE 17-1230 Mocha Mousse
+      color: 'bg-[#A47864] text-white shadow-[#A47864]/30',
       hoverCard:
-        'hover:border-indigo-400 hover:bg-gradient-to-br hover:from-white hover:via-indigo-50/80 hover:to-violet-100/60 hover:shadow-xl hover:shadow-indigo-600/15',
-      topBar: 'from-indigo-500 to-violet-500',
-      valueHover: 'group-hover:text-indigo-700',
+        'hover:border-[#C9A99A] hover:bg-gradient-to-br hover:from-white hover:via-[#FAF6F4] hover:to-[#F1E7E2] hover:shadow-xl hover:shadow-[#A47864]/20',
+      topBar: 'from-[#A47864] to-[#D2B4A6]',
+      valueHover: 'group-hover:text-[#7D5644]',
     },
   ];
 
   return (
     <div className="space-y-6">
-      {/* แถบต้อนรับผู้ใช้งานและวันที่ปัจจุบัน */}
-      <div className="relative overflow-hidden rounded-2xl border border-gov-200/80 bg-gradient-to-r from-gov-900 via-gov-800 to-indigo-900 p-5 sm:p-6 text-white shadow-lg transition-all duration-300 hover:shadow-xl">
-        <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-sky-400/15 blur-2xl" />
-        <div className="pointer-events-none absolute -bottom-12 left-1/3 h-40 w-40 rounded-full bg-amber-400/10 blur-2xl" />
+      {/* แถบต้อนรับผู้ใช้งานและวันที่ปัจจุบัน (โทน PANTONE Ultra Violet & Very Peri) */}
+      <div className="relative overflow-hidden rounded-2xl border border-gov-200/80 bg-gradient-to-r from-[#2E2348] via-[#5F4B8B] to-[#6667AB] p-5 sm:p-6 text-white shadow-lg transition-all duration-300 hover:shadow-xl hover:shadow-[#5F4B8B]/20">
+        <div className="pointer-events-none absolute -right-10 -top-10 h-44 w-44 rounded-full bg-[#FFBE98]/20 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-12 left-1/3 h-40 w-40 rounded-full bg-[#92A8D1]/20 blur-2xl" />
 
         <div className="relative flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1.5">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-sky-200 backdrop-blur-xs border border-white/15">
-              <Sparkles className="h-3.5 w-3.5 text-amber-300" />
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/12 px-3 py-1 text-xs font-medium text-[#FFBE98] backdrop-blur-xs border border-white/15">
+              <Sparkles className="h-3.5 w-3.5 text-[#FFBE98]" />
               <span>{ROLE_LABELS[role]?.label || 'ผู้ใช้งานระบบ'}</span>
             </div>
             <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
               สวัสดี, {displayUserName}
             </h1>
-            <p className="text-xs sm:text-sm text-sky-100/85">
+            <p className="text-xs sm:text-sm text-[#EDEAF7]/90">
               ยินดีต้อนรับสู่แดชบอร์ดบริหารจัดการครุภัณฑ์สำนักงาน — สรุปสถานะครุภัณฑ์และธุรกรรมพัสดุแบบเรียลไทม์
             </p>
           </div>
 
           <div className="flex flex-col items-start sm:items-end gap-2.5">
             <div className="inline-flex items-center gap-2 rounded-xl bg-white/12 px-4 py-2 text-xs sm:text-sm font-semibold text-white backdrop-blur-xs border border-white/20 shadow-xs">
-              <CalendarDays className="h-4 w-4 text-amber-300 shrink-0" />
+              <CalendarDays className="h-4 w-4 text-[#FFBE98] shrink-0" />
               <span>วันที่ปัจจุบัน: {currentThaiDateText}</span>
             </div>
 
@@ -440,7 +448,7 @@ export function DashboardPage() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* กราฟแยกตามหมวดหมู่ */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition-all duration-300 hover:border-gov-300 hover:shadow-lg lg:col-span-2">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition-all duration-300 hover:border-[#9E91D3] hover:shadow-lg hover:shadow-[#6667AB]/10 lg:col-span-2">
           <h2 className="text-base font-bold text-slate-900">จำนวนครุภัณฑ์แยกตามประเภท/หมวดหมู่</h2>
           <p className="text-xs text-slate-500">เปรียบเทียบจำนวนรายการครุภัณฑ์ในแต่ละหมวดหมู่มาตรฐาน</p>
           <div className="mt-4 h-72 w-full">
@@ -470,7 +478,7 @@ export function DashboardPage() {
         </div>
 
         {/* กราฟสัดส่วนสถานะ */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition-all duration-300 hover:border-emerald-300 hover:shadow-lg">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition-all duration-300 hover:border-[#5B9E7D]/60 hover:shadow-lg hover:shadow-[#5B9E7D]/10">
           <h2 className="text-base font-bold text-slate-900">สัดส่วนตามสถานะครุภัณฑ์</h2>
           <p className="text-xs text-slate-500">ภาพรวมสถานะความพร้อมใช้งานปัจจุบัน</p>
           <div className="mt-4 h-72 w-full">
@@ -497,8 +505,8 @@ export function DashboardPage() {
                   <Tooltip
                     contentStyle={{
                       borderRadius: '12px',
-                      border: '1px solid #a7f3d0',
-                      boxShadow: '0 10px 25px -5px rgba(16, 185, 129, 0.2)',
+                      border: '1px solid #DCD6F0',
+                      boxShadow: '0 10px 25px -5px rgba(95, 75, 139, 0.18)',
                     }}
                   />
                   <Legend wrapperStyle={{ fontSize: '12px' }} />
@@ -511,7 +519,7 @@ export function DashboardPage() {
 
       {/* กราฟแยกตามหน่วยงาน และกำหนดการที่กำลังจะมาถึง */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition-all duration-300 hover:border-sky-300 hover:shadow-lg">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition-all duration-300 hover:border-[#92A8D1] hover:shadow-lg hover:shadow-[#6F9FD8]/15">
           <h2 className="text-base font-bold text-slate-900">ครุภัณฑ์แยกตามหน่วยงาน/ฝ่าย</h2>
           <p className="text-xs text-slate-500">จำนวนครุภัณฑ์ในความรับผิดชอบของแต่ละกอง/สำนัก</p>
           <div className="mt-4 h-64 w-full">
@@ -545,7 +553,7 @@ export function DashboardPage() {
         </div>
 
         {/* รายการยืม-คืนที่ต้องดำเนินการ */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition-all duration-300 hover:border-amber-300 hover:shadow-lg">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition-all duration-300 hover:border-[#FFBE98] hover:shadow-lg hover:shadow-[#E2875A]/15">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-base font-bold text-slate-900">รายการยืม-คืนที่ต้องติดตาม</h2>
@@ -562,7 +570,7 @@ export function DashboardPage() {
               dashboardData.actionableBorrows.map((req) => (
                 <div
                   key={req.id}
-                  className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/70 p-3 text-xs transition-all duration-200 hover:translate-x-1 hover:border-sky-300 hover:bg-gradient-to-r hover:from-sky-50/90 hover:to-indigo-50/60 hover:shadow-xs"
+                  className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50/70 p-3 text-xs transition-all duration-200 hover:translate-x-1 hover:border-[#92A8D1] hover:bg-gradient-to-r hover:from-[#F3F7FC] hover:to-[#F6F5FB] hover:shadow-xs"
                 >
                   <div className="min-w-0 pr-2">
                     <p className="font-semibold text-slate-900 truncate">
@@ -583,7 +591,7 @@ export function DashboardPage() {
         </div>
 
         {/* กิจกรรมที่กำลังจะมาถึง */}
-        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition-all duration-300 hover:border-indigo-300 hover:shadow-lg">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition-all duration-300 hover:border-[#C1B7E4] hover:shadow-lg hover:shadow-[#5F4B8B]/15">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-base font-bold text-slate-900">กำหนดการและกิจกรรมล่าสุด</h2>
@@ -600,7 +608,7 @@ export function DashboardPage() {
               dashboardData.upcomingEvents.map((ev) => (
                 <div
                   key={ev.id}
-                  className="rounded-lg border border-slate-100 bg-slate-50/70 p-3 text-xs transition-all duration-200 hover:translate-x-1 hover:border-indigo-300 hover:bg-gradient-to-r hover:from-indigo-50/90 hover:to-purple-50/60 hover:shadow-xs"
+                  className="rounded-lg border border-slate-100 bg-slate-50/70 p-3 text-xs transition-all duration-200 hover:translate-x-1 hover:border-[#C1B7E4] hover:bg-gradient-to-r hover:from-[#F6F5FB] hover:to-[#FDF6F2] hover:shadow-xs"
                 >
                   <p className="font-semibold text-slate-900">{ev.title}</p>
                   <p className="mt-0.5 text-slate-600">{formatThaiDateTime(ev.start_at)}</p>
@@ -613,7 +621,7 @@ export function DashboardPage() {
       </div>
 
       {/* ตารางครุภัณฑ์ที่ขึ้นทะเบียนล่าสุด */}
-      <div className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden transition-all duration-300 hover:border-gov-300 hover:shadow-md">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden transition-all duration-300 hover:border-[#C1B7E4] hover:shadow-md">
         <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
           <div>
             <h2 className="text-base font-bold text-slate-900">รายการครุภัณฑ์ที่ขึ้นทะเบียนล่าสุด</h2>
@@ -653,7 +661,7 @@ export function DashboardPage() {
                   return (
                     <tr
                       key={asset.id}
-                      className="transition-colors duration-200 hover:bg-gradient-to-r hover:from-gov-50/90 hover:via-sky-50/60 hover:to-transparent"
+                      className="transition-colors duration-200 hover:bg-gradient-to-r hover:from-[#F6F5FB] hover:via-[#EDEAF7]/60 hover:to-[#FDF6F2]/50"
                     >
                       <td className="px-4 py-3 font-mono font-semibold text-gov-700">
                         <Link to={`/assets/${asset.id}`} className="hover:underline">
