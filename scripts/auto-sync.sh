@@ -19,4 +19,7 @@ if ! git remote get-url origin >/dev/null 2>&1; then
   exit 0
 fi
 
+echo "🚀 3. กำลังส่งโค้ดขึ้น GitHub (origin main)..."
+git push -u origin main
+
 echo "✅ โค้ดถูก Commit และส่งขึ้น GitHub เรียบร้อยแล้ว!"
