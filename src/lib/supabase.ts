@@ -44,6 +44,18 @@ export const supabase: SupabaseClient = createClient(effectiveUrl, effectiveKey,
   },
 });
 
+// สร้าง Client แยกที่ไม่เขียนทับ Session ปัจจุบัน (ใช้สำหรับกรณี Admin สร้างบัญชีให้บุคลากรใหม่)
+export function createIsolatedAuthClient(): SupabaseClient {
+  return createClient(effectiveUrl, effectiveKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      storageKey: 'sb-isolated-admin-user-creator',
+    },
+  });
+}
+
 export function assertSupabaseConfigured(): void {
   if (!isSupabaseConfigured()) {
     throw new Error(

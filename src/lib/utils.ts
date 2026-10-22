@@ -61,11 +61,31 @@ export function translateSupabaseError(error: unknown): string {
   }
 
   if (msg.includes('invalid login credentials')) {
-    return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง';
+    return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบอีกครั้ง (หากยังไม่มีบัญชี กรุณากด "สร้างบัญชีผู้ใช้ใหม่")';
+  }
+
+  if (msg.includes('user already registered') || msg.includes('already been registered')) {
+    return 'อีเมลนี้ถูกลงทะเบียนไว้ในระบบแล้ว กรุณาเข้าสู่ระบบหรือใช้ฟีเจอร์ลืมรหัสผ่าน';
+  }
+
+  if (msg.includes('password should be at least')) {
+    return 'รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร';
+  }
+
+  if (msg.includes('new password should be different') || code === 'same_password') {
+    return 'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านเดิม';
+  }
+
+  if (msg.includes('rate limit') || msg.includes('too many requests') || msg.includes('over_email_send_rate_limit')) {
+    return 'ส่งคำขอถี่เกินไป กรุณารอสักครู่แล้วลองใหม่อีกครั้ง';
+  }
+
+  if (msg.includes('signups not allowed') || msg.includes('signup_disabled')) {
+    return 'ระบบปิดการสมัครสมาชิกด้วยตนเองชั่วคราว กรุณาติดต่อผู้ดูแลระบบ';
   }
 
   if (msg.includes('email not confirmed')) {
-    return 'บัญชีนี้ยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมายของคุณ';
+    return 'บัญชีนี้ยังไม่ได้ยืนยันอีเมล กรุณาตรวจสอบกล่องจดหมายของคุณ (หรือยืนยันผ่าน Supabase Dashboard)';
   }
 
   if (msg.includes('jwt expired') || msg.includes('session_not_found')) {

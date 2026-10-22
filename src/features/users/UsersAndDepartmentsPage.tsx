@@ -10,8 +10,14 @@ import {
   ShieldCheck,
   Loader2,
   Info,
+  UserPlus,
 } from 'lucide-react';
-import { assertSupabaseConfigured, recordAuditLog, supabase } from '@/lib/supabase';
+import {
+  assertSupabaseConfigured,
+  createIsolatedAuthClient,
+  recordAuditLog,
+  supabase,
+} from '@/lib/supabase';
 import { ROLE_LABELS, translateSupabaseError } from '@/lib/utils';
 import { useDepartments, useLocations, useProfiles } from '@/hooks/useMasterData';
 import { LoadingState, Modal, PageHeader, StatusBadge } from '@/components/ui/common';
@@ -32,6 +38,16 @@ export function UsersAndDepartmentsPage() {
   const [positionText, setPositionText] = useState('');
   const [isActiveUser, setIsActiveUser] = useState(true);
   const [isSavingUser, setIsSavingUser] = useState(false);
+
+  // Create User State (Admin สร้างบัญชีให้บุคลากรโดยตรง)
+  const [isCreateUserModalOpen, setIsCreateUserModalOpen] = useState(false);
+  const [newUserFullName, setNewUserFullName] = useState('');
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState<UserRole>('requester');
+  const [newUserDeptId, setNewUserDeptId] = useState('');
+  const [newUserPosition, setNewUserPosition] = useState('');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   // Create Department State
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
@@ -84,6 +100,74 @@ export function UsersAndDepartmentsPage() {
       toast.error(translateSupabaseError(err));
     } finally {
       setIsSavingUser(false);
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserFullName.trim() || !newUserEmail.trim() || newUserPassword.length < 6) {
+      toast.error('กรุณากรอกชื่อ-นามสกุล อีเมล และรหัสผ่าน (อย่างน้อย 6 ตัวอักษร) ให้ครบถ้วน');
+      return;
+    }
+
+    setIsCreatingUser(true);
+    try {
+      assertSupabaseConfigured();
+      const isolatedClient = createIsolatedAuthClient();
+      const cleanEmail = newUserEmail.trim().toLowerCase();
+      const cleanName = newUserFullName.trim();
+      const cleanPosition = newUserPosition.trim() || null;
+
+      const { data, error } = await isolatedClient.auth.signUp({
+        email: cleanEmail,
+        password: newUserPassword,
+        options: {
+          data: {
+            full_name: cleanName,
+            position: cleanPosition,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        // อัปเดตชื่อและกำหนดสิทธิ์/หน่วยงานผ่าน RPC ของ Admin
+        await supabase
+          .from('profiles')
+          .update({ full_name: cleanName })
+          .eq('id', data.user.id);
+
+        await supabase.rpc('admin_update_user_role', {
+          p_target_user_id: data.user.id,
+          p_new_role: newUserRole,
+          p_department_id: newUserDeptId || null,
+          p_position: cleanPosition,
+          p_is_active: true,
+        });
+
+        await recordAuditLog({
+          action: 'USER_CREATED_BY_ADMIN',
+          entityType: 'profiles',
+          entityId: data.user.id,
+          summary: `ผู้ดูแลระบบสร้างบัญชีใหม่: ${cleanName} (${cleanEmail}) สิทธิ์ ${newUserRole}`,
+        });
+      }
+
+      toast.success(`สร้างบัญชีผู้ใช้งาน ${cleanName} (${cleanEmail}) สำเร็จ`);
+      setIsCreateUserModalOpen(false);
+      setNewUserFullName('');
+      setNewUserEmail('');
+      setNewUserPassword('');
+      setNewUserRole('requester');
+      setNewUserDeptId('');
+      setNewUserPosition('');
+      queryClient.invalidateQueries({ queryKey: ['profiles'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs-list'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsCreatingUser(false);
     }
   };
 
@@ -238,6 +322,16 @@ export function UsersAndDepartmentsPage() {
         </div>
 
         <div className="pb-2">
+          {activeTab === 'users' && (
+            <button
+              type="button"
+              onClick={() => setIsCreateUserModalOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gov-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gov-800"
+            >
+              <UserPlus className="h-4 w-4" />
+              สร้างบัญชีผู้ใช้งานใหม่
+            </button>
+          )}
           {activeTab === 'departments' && (
             <button
               type="button"
@@ -388,6 +482,121 @@ export function UsersAndDepartmentsPage() {
           )
         )}
       </div>
+
+      {/* Modal สร้างบัญชีผู้ใช้งานใหม่โดย Admin */}
+      <Modal
+        open={isCreateUserModalOpen}
+        onClose={() => setIsCreateUserModalOpen(false)}
+        title="สร้างบัญชีผู้ใช้งานใหม่"
+        description="เพิ่มบัญชีบุคลากรเข้าสู่ระบบพร้อมกำหนดระดับสิทธิ์และหน่วยงานสังกัดทันที"
+      >
+        <form onSubmit={handleCreateUser} className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">ชื่อ-นามสกุล *</label>
+              <input
+                type="text"
+                value={newUserFullName}
+                onChange={(e) => setNewUserFullName(e.target.value)}
+                placeholder="เช่น นางสาวสุดา พัสดุดี"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">อีเมลผู้ใช้งาน (Email) *</label>
+              <input
+                type="email"
+                value={newUserEmail}
+                onChange={(e) => setNewUserEmail(e.target.value)}
+                placeholder="suda@agency.go.th"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">
+                รหัสผ่านเริ่มต้น (อย่างน้อย 6 ตัวอักษร) *
+              </label>
+              <input
+                type="password"
+                value={newUserPassword}
+                onChange={(e) => setNewUserPassword(e.target.value)}
+                placeholder="••••••••"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">ตำแหน่งราชการ</label>
+              <input
+                type="text"
+                value={newUserPosition}
+                onChange={(e) => setNewUserPosition(e.target.value)}
+                placeholder="เช่น นักวิชาการพัสดุปฏิบัติการ"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">ระดับสิทธิ์ (Role)</label>
+              <select
+                value={newUserRole}
+                onChange={(e) => setNewUserRole(e.target.value as UserRole)}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"
+              >
+                {Object.entries(ROLE_LABELS).map(([key, meta]) => (
+                  <option key={key} value={key}>
+                    {meta.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">หน่วยงานสังกัด</label>
+              <select
+                value={newUserDeptId}
+                onChange={(e) => setNewUserDeptId(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">-- ไม่ระบุหน่วยงาน --</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.code} - {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => setIsCreateUserModalOpen(false)}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={isCreatingUser}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gov-700 px-4 py-2 text-xs font-semibold text-white hover:bg-gov-800"
+            >
+              {isCreatingUser ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <UserPlus className="h-4 w-4" />
+              )}
+              สร้างบัญชีผู้ใช้งาน
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Modal กำหนดบทบาทผู้ใช้ */}
       <Modal
