@@ -70,7 +70,6 @@ async function main() {
     'supabase/migrations/00002_rls_policies.sql',
     'supabase/migrations/00003_rpc_functions.sql',
     'supabase/migrations/00004_storage_buckets.sql',
-    'supabase/seed.sql',
     'supabase/create_admin_user.sql',
   ];
 
