@@ -12,6 +12,8 @@ import {
   Plus,
   Loader2,
   Building2,
+  Edit3,
+  Trash2,
 } from 'lucide-react';
 import {
   assertSupabaseConfigured,
@@ -24,7 +26,8 @@ import { translateSupabaseError } from '@/lib/utils';
 import { uploadFileToBucket } from '@/lib/storage';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useCategories, useSystemSettings } from '@/hooks/useMasterData';
-import { LoadingState, Modal, PageHeader } from '@/components/ui/common';
+import { ConfirmDialog, LoadingState, Modal, PageHeader } from '@/components/ui/common';
+import type { AssetCategory } from '@/types/database';
 
 const settingsSchema = z.object({
   org_name: z.string().min(2, 'กรุณาระบุชื่อหน่วยงาน'),
@@ -51,10 +54,13 @@ export function SettingsPage() {
 
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [isCatModalOpen, setIsCatModalOpen] = useState(false);
+  const [editingCat, setEditingCat] = useState<AssetCategory | null>(null);
+  const [deletingCat, setDeletingCat] = useState<AssetCategory | null>(null);
   const [catCode, setCatCode] = useState('');
   const [catName, setCatName] = useState('');
   const [catLife, setCatLife] = useState(5);
   const [catDepRate, setCatDepRate] = useState(20);
+  const [catActive, setCatActive] = useState(true);
   const [isSavingCat, setIsSavingCat] = useState(false);
 
   const {
@@ -144,7 +150,27 @@ export function SettingsPage() {
     }
   };
 
-  const handleAddCategory = async (e: React.FormEvent) => {
+  const openCreateCategory = () => {
+    setEditingCat(null);
+    setCatCode('');
+    setCatName('');
+    setCatLife(5);
+    setCatDepRate(20);
+    setCatActive(true);
+    setIsCatModalOpen(true);
+  };
+
+  const openEditCategory = (cat: AssetCategory) => {
+    setEditingCat(cat);
+    setCatCode(cat.code);
+    setCatName(cat.name);
+    setCatLife(cat.useful_life_years);
+    setCatDepRate(cat.depreciation_rate);
+    setCatActive(cat.is_active);
+    setIsCatModalOpen(true);
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!catCode.trim() || !catName.trim()) {
       toast.error('กรุณาระบุรหัสและชื่อหมวดหมู่ครุภัณฑ์');
@@ -154,28 +180,53 @@ export function SettingsPage() {
     setIsSavingCat(true);
     try {
       assertSupabaseConfigured();
-      const { data, error } = await supabase
-        .from('asset_categories')
-        .insert({
-          code: catCode.trim(),
-          name: catName.trim(),
-          useful_life_years: Number(catLife),
-          depreciation_rate: Number(catDepRate),
-          is_active: true,
-        })
-        .select('id')
-        .single();
-      if (error) throw error;
+      if (editingCat) {
+        const { error } = await supabase
+          .from('asset_categories')
+          .update({
+            code: catCode.trim(),
+            name: catName.trim(),
+            useful_life_years: Number(catLife),
+            depreciation_rate: Number(catDepRate),
+            is_active: catActive,
+          })
+          .eq('id', editingCat.id);
+        if (error) throw error;
 
-      await recordAuditLog({
-        action: 'CATEGORY_CREATED',
-        entityType: 'asset_categories',
-        entityId: data.id,
-        summary: `เพิ่มหมวดหมู่ครุภัณฑ์: ${catCode} - ${catName}`,
-      });
+        await recordAuditLog({
+          action: 'CATEGORY_UPDATED',
+          entityType: 'asset_categories',
+          entityId: editingCat.id,
+          summary: `แก้ไขหมวดหมู่ครุภัณฑ์: ${catCode.trim()} - ${catName.trim()}`,
+        });
 
-      toast.success('เพิ่มหมวดหมู่ครุภัณฑ์ใหม่สำเร็จ');
+        toast.success('แก้ไขหมวดหมู่ครุภัณฑ์สำเร็จ');
+      } else {
+        const { data, error } = await supabase
+          .from('asset_categories')
+          .insert({
+            code: catCode.trim(),
+            name: catName.trim(),
+            useful_life_years: Number(catLife),
+            depreciation_rate: Number(catDepRate),
+            is_active: catActive,
+          })
+          .select('id')
+          .single();
+        if (error) throw error;
+
+        await recordAuditLog({
+          action: 'CATEGORY_CREATED',
+          entityType: 'asset_categories',
+          entityId: data.id,
+          summary: `เพิ่มหมวดหมู่ครุภัณฑ์: ${catCode} - ${catName}`,
+        });
+
+        toast.success('เพิ่มหมวดหมู่ครุภัณฑ์ใหม่สำเร็จ');
+      }
+
       setIsCatModalOpen(false);
+      setEditingCat(null);
       setCatCode('');
       setCatName('');
       queryClient.invalidateQueries({ queryKey: ['asset_categories'] });
@@ -183,6 +234,31 @@ export function SettingsPage() {
       toast.error(translateSupabaseError(err));
     } finally {
       setIsSavingCat(false);
+    }
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!deletingCat) return;
+    try {
+      assertSupabaseConfigured();
+      const { error } = await supabase
+        .from('asset_categories')
+        .delete()
+        .eq('id', deletingCat.id);
+      if (error) throw error;
+
+      await recordAuditLog({
+        action: 'CATEGORY_DELETED',
+        entityType: 'asset_categories',
+        entityId: deletingCat.id,
+        summary: `ลบหมวดหมู่ครุภัณฑ์: ${deletingCat.code} - ${deletingCat.name}`,
+      });
+
+      toast.success(`ลบหมวดหมู่ "${deletingCat.name}" สำเร็จ`);
+      setDeletingCat(null);
+      queryClient.invalidateQueries({ queryKey: ['asset_categories'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
     }
   };
 
@@ -407,7 +483,7 @@ export function SettingsPage() {
               <h2 className="text-sm font-bold text-slate-900">หมวดหมู่ครุภัณฑ์ ({categories.length})</h2>
               <button
                 type="button"
-                onClick={() => setIsCatModalOpen(true)}
+                onClick={openCreateCategory}
                 className="inline-flex items-center gap-1 rounded-lg bg-gov-50 px-2.5 py-1 text-xs font-semibold text-gov-700 hover:bg-gov-100"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -415,14 +491,36 @@ export function SettingsPage() {
               </button>
             </div>
 
-            <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto text-xs">
+            <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto text-xs">
               {categories.map((cat) => (
-                <div key={cat.id} className="py-2 flex items-center justify-between">
-                  <div>
+                <div key={cat.id} className="py-2 flex items-center justify-between gap-2">
+                  <div className="min-w-0 flex-1">
                     <span className="font-mono font-bold text-gov-700">{cat.code}</span> —{' '}
-                    <span className="font-medium text-slate-800">{cat.name}</span>
+                    <span className={`font-medium ${cat.is_active ? 'text-slate-800' : 'text-slate-400 line-through'}`}>
+                      {cat.name}
+                    </span>
+                    <span className="ml-2 text-[11px] text-slate-400">
+                      ({cat.useful_life_years} ปี / {cat.depreciation_rate}%)
+                    </span>
                   </div>
-                  <span className="text-slate-400">{cat.useful_life_years} ปี</span>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => openEditCategory(cat)}
+                      className="rounded-md p-1 text-slate-600 hover:bg-slate-100"
+                      title="แก้ไขหมวดหมู่"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDeletingCat(cat)}
+                      className="rounded-md p-1 text-rose-600 hover:bg-rose-50"
+                      title="ลบหมวดหมู่"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -430,14 +528,17 @@ export function SettingsPage() {
         </div>
       </div>
 
-      {/* Modal เพิ่มหมวดหมู่ครุภัณฑ์ */}
+      {/* Modal เพิ่ม/แก้ไขหมวดหมู่ครุภัณฑ์ */}
       <Modal
         open={isCatModalOpen}
-        onClose={() => setIsCatModalOpen(false)}
-        title="เพิ่มหมวดหมู่ครุภัณฑ์มาตรฐาน"
+        onClose={() => {
+          setIsCatModalOpen(false);
+          setEditingCat(null);
+        }}
+        title={editingCat ? 'แก้ไขหมวดหมู่ครุภัณฑ์มาตรฐาน' : 'เพิ่มหมวดหมู่ครุภัณฑ์มาตรฐาน'}
         maxWidth="max-w-md"
       >
-        <form onSubmit={handleAddCategory} className="space-y-4">
+        <form onSubmit={handleSaveCategory} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700">รหัสหมวดหมู่พัสดุ *</label>
             <input
@@ -479,10 +580,25 @@ export function SettingsPage() {
               />
             </div>
           </div>
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              id="cat-active"
+              type="checkbox"
+              checked={catActive}
+              onChange={(e) => setCatActive(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-300 text-gov-700"
+            />
+            <label htmlFor="cat-active" className="text-xs font-semibold text-slate-700">
+              เปิดใช้งานหมวดหมู่นี้
+            </label>
+          </div>
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
             <button
               type="button"
-              onClick={() => setIsCatModalOpen(false)}
+              onClick={() => {
+                setIsCatModalOpen(false);
+                setEditingCat(null);
+              }}
               className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700"
             >
               ยกเลิก
@@ -498,6 +614,15 @@ export function SettingsPage() {
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(deletingCat)}
+        onClose={() => setDeletingCat(null)}
+        onConfirm={handleDeleteCategory}
+        title="ยืนยันการลบหมวดหมู่ครุภัณฑ์"
+        description={`คุณต้องการลบหมวดหมู่ "${deletingCat?.code} - ${deletingCat?.name}" ออกจากระบบใช่หรือไม่? (หากมีครุภัณฑ์ผูกกับหมวดหมู่นี้อยู่ ระบบอาจไม่อนุญาตให้ลบ)`}
+        confirmLabel="ยืนยันลบหมวดหมู่"
+      />
     </div>
   );
 }

@@ -413,7 +413,7 @@ BEGIN
     UPDATE public.assets
     SET status = 'disposed', updated_by = auth.uid(), updated_at = NOW()
     WHERE id = v_disp.asset_id;
-  ELSIF p_new_status = 'rejected' THEN
+  ELSIF p_new_status IN ('rejected', 'draft') THEN
     UPDATE public.assets
     SET status = 'available', updated_by = auth.uid(), updated_at = NOW()
     WHERE id = v_disp.asset_id AND status = 'pending_disposal';
@@ -542,5 +542,54 @@ BEGIN
   DELETE FROM auth.users WHERE id = p_target_user_id;
 
   RETURN jsonb_build_object('success', TRUE, 'deleted_user_id', p_target_user_id);
+END;
+$$;
+
+-- 7. RPC: ลบครุภัณฑ์พร้อมประวัติธุรกรรมที่เกี่ยวข้องโดย Admin หรือเจ้าหน้าที่พัสดุ
+CREATE OR REPLACE FUNCTION public.delete_asset_cascade(
+  p_asset_id UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_asset RECORD;
+BEGIN
+  IF NOT public.is_staff_or_admin() THEN
+    RAISE EXCEPTION 'เฉพาะผู้ดูแลระบบหรือเจ้าหน้าที่พัสดุเท่านั้นที่มีสิทธิ์ลบรายการครุภัณฑ์';
+  END IF;
+
+  SELECT * INTO v_asset FROM public.assets WHERE id = p_asset_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ไม่พบข้อมูลครุภัณฑ์ที่ต้องการลบ';
+  END IF;
+
+  PERFORM public.write_audit_log(
+    'ASSET_DELETED',
+    'assets',
+    p_asset_id::TEXT,
+    format('ลบครุภัณฑ์ %s (%s) ออกจากระบบ', v_asset.asset_code, v_asset.name),
+    jsonb_build_object(
+      'asset_code', v_asset.asset_code,
+      'name', v_asset.name,
+      'unit_price', v_asset.unit_price,
+      'status', v_asset.status
+    ),
+    NULL
+  );
+
+  DELETE FROM public.borrow_transactions WHERE asset_id = p_asset_id;
+  DELETE FROM public.borrow_requests WHERE asset_id = p_asset_id;
+  DELETE FROM public.maintenance_logs WHERE asset_id = p_asset_id;
+  DELETE FROM public.maintenance_requests WHERE asset_id = p_asset_id;
+  DELETE FROM public.disposal_requests WHERE asset_id = p_asset_id;
+  DELETE FROM public.asset_transfers WHERE asset_id = p_asset_id;
+  DELETE FROM public.inventory_items WHERE asset_id = p_asset_id;
+  DELETE FROM public.asset_attachments WHERE asset_id = p_asset_id;
+  DELETE FROM public.assets WHERE id = p_asset_id;
+
+  RETURN jsonb_build_object('success', TRUE, 'deleted_asset_id', p_asset_id);
 END;
 $$;

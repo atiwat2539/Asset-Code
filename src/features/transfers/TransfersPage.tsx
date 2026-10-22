@@ -10,6 +10,8 @@ import {
   XCircle,
   Loader2,
   Search,
+  Edit3,
+  Trash2,
 } from 'lucide-react';
 import { assertSupabaseConfigured, isSupabaseConfigured, recordAuditLog, supabase } from '@/lib/supabase';
 import { TRANSFER_STATUS_META, translateSupabaseError } from '@/lib/utils';
@@ -17,6 +19,7 @@ import { formatThaiDate, toISODateInput } from '@/lib/date';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useDepartments, useLocations, useProfiles } from '@/hooks/useMasterData';
 import {
+  ConfirmDialog,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -24,7 +27,7 @@ import {
   PageHeader,
   StatusBadge,
 } from '@/components/ui/common';
-import type { Asset, AssetTransfer } from '@/types/database';
+import type { Asset, AssetTransfer, TransferStatus } from '@/types/database';
 
 const transferSchema = z.object({
   asset_id: z.string().min(1, 'กรุณาเลือกครุภัณฑ์ที่ต้องการโอนย้าย'),
@@ -58,6 +61,20 @@ export function TransfersPage() {
   } | null>(null);
   const [approvalReason, setApprovalReason] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Edit & Delete Transfer state
+  const [editingTransfer, setEditingTransfer] = useState<AssetTransfer | null>(null);
+  const [deletingTransfer, setDeletingTransfer] = useState<AssetTransfer | null>(null);
+  const [editTransferForm, setEditTransferForm] = useState({
+    to_department_id: '',
+    to_location_id: '',
+    to_custodian_id: '',
+    effective_date: '',
+    reason: '',
+    status: 'pending' as TransferStatus,
+    notes: '',
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const {
     data: transfers = [],
@@ -194,6 +211,85 @@ export function TransfersPage() {
     }
   };
 
+  const openEditTransferModal = (tr: AssetTransfer) => {
+    setEditingTransfer(tr);
+    setEditTransferForm({
+      to_department_id: tr.to_department_id || '',
+      to_location_id: tr.to_location_id || '',
+      to_custodian_id: tr.to_custodian_id || '',
+      effective_date: tr.effective_date,
+      reason: tr.reason,
+      status: tr.status,
+      notes: tr.notes || '',
+    });
+  };
+
+  const handleSaveEditTransfer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTransfer || !editTransferForm.to_department_id || !editTransferForm.reason.trim()) {
+      toast.error('กรุณาระบุหน่วยงานปลายทางและเหตุผลในการโอนย้าย');
+      return;
+    }
+    setIsSavingEdit(true);
+    try {
+      assertSupabaseConfigured();
+      const { error: updErr } = await supabase
+        .from('asset_transfers')
+        .update({
+          to_department_id: editTransferForm.to_department_id,
+          to_location_id: editTransferForm.to_location_id || null,
+          to_custodian_id: editTransferForm.to_custodian_id || null,
+          effective_date: editTransferForm.effective_date,
+          reason: editTransferForm.reason.trim(),
+          status: editTransferForm.status,
+          notes: editTransferForm.notes.trim() || null,
+        })
+        .eq('id', editingTransfer.id);
+      if (updErr) throw updErr;
+
+      await recordAuditLog({
+        action: 'TRANSFER_REQUEST_UPDATED',
+        entityType: 'asset_transfers',
+        entityId: editingTransfer.id,
+        summary: `แก้ไขใบโอนย้ายครุภัณฑ์เลขที่ ${editingTransfer.transfer_no}`,
+      });
+
+      toast.success('บันทึกการแก้ไขใบโอนย้ายสำเร็จ');
+      setEditingTransfer(null);
+      queryClient.invalidateQueries({ queryKey: ['asset-transfers'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleConfirmDeleteTransfer = async () => {
+    if (!deletingTransfer) return;
+    try {
+      assertSupabaseConfigured();
+      const { error: delErr } = await supabase
+        .from('asset_transfers')
+        .delete()
+        .eq('id', deletingTransfer.id);
+      if (delErr) throw delErr;
+
+      await recordAuditLog({
+        action: 'TRANSFER_REQUEST_DELETED',
+        entityType: 'asset_transfers',
+        entityId: deletingTransfer.id,
+        summary: `ลบใบโอนย้ายครุภัณฑ์เลขที่ ${deletingTransfer.transfer_no}`,
+      });
+
+      toast.success(`ลบใบโอนย้ายเลขที่ ${deletingTransfer.transfer_no} เรียบร้อยแล้ว`);
+      setDeletingTransfer(null);
+      queryClient.invalidateQueries({ queryKey: ['asset-transfers'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    }
+  };
+
   const filteredTransfers = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return transfers.filter((t) => {
@@ -271,7 +367,7 @@ export function TransfersPage() {
                   <th className="p-3.5">ปลายทาง (ใหม่)</th>
                   <th className="p-3.5">เหตุผล / วันที่มีผล</th>
                   <th className="p-3.5">สถานะ</th>
-                  <th className="p-3.5 text-right">การอนุมัติ</th>
+                  <th className="p-3.5 text-right">การอนุมัติ / จัดการ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 text-xs">
@@ -317,32 +413,54 @@ export function TransfersPage() {
                       />
                     </td>
                     <td className="p-3.5 text-right whitespace-nowrap">
-                      {canApprove && tr.status === 'pending' && (
-                        <div className="inline-flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setApprovalReason('');
-                              setApprovalTarget({ transfer: tr, approved: true });
-                            }}
-                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
-                          >
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            อนุมัติโอนย้าย
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setApprovalReason('');
-                              setApprovalTarget({ transfer: tr, approved: false });
-                            }}
-                            className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
-                          >
-                            <XCircle className="h-3.5 w-3.5" />
-                            ปฏิเสธ
-                          </button>
-                        </div>
-                      )}
+                      <div className="inline-flex items-center gap-1.5">
+                        {canApprove && tr.status === 'pending' && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setApprovalReason('');
+                                setApprovalTarget({ transfer: tr, approved: true });
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              อนุมัติโอนย้าย
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setApprovalReason('');
+                                setApprovalTarget({ transfer: tr, approved: false });
+                              }}
+                              className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
+                            >
+                              <XCircle className="h-3.5 w-3.5" />
+                              ปฏิเสธ
+                            </button>
+                          </>
+                        )}
+                        {(canApprove || tr.requested_by === user?.id) && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openEditTransferModal(tr)}
+                              className="rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-100"
+                              title="แก้ไขใบโอนย้าย"
+                            >
+                              <Edit3 className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingTransfer(tr)}
+                              className="rounded-lg border border-rose-200 p-1.5 text-rose-600 hover:bg-rose-50"
+                              title="ลบใบโอนย้าย"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -528,6 +646,155 @@ export function TransfersPage() {
           </div>
         )}
       </Modal>
+
+      {/* Modal แก้ไขใบโอนย้าย */}
+      <Modal
+        open={Boolean(editingTransfer)}
+        onClose={() => setEditingTransfer(null)}
+        title={`แก้ไขใบโอนย้าย: ${editingTransfer?.transfer_no || ''}`}
+      >
+        {editingTransfer && (
+          <form onSubmit={handleSaveEditTransfer} className="space-y-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">หน่วยงานปลายทาง *</label>
+                <select
+                  value={editTransferForm.to_department_id}
+                  onChange={(e) =>
+                    setEditTransferForm({ ...editTransferForm, to_department_id: e.target.value })
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">-- เลือกหน่วยงานใหม่ --</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.code} - {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">สถานที่ตั้งใหม่</label>
+                <select
+                  value={editTransferForm.to_location_id}
+                  onChange={(e) =>
+                    setEditTransferForm({ ...editTransferForm, to_location_id: e.target.value })
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">-- เลือกสถานที่ตั้งใหม่ --</option>
+                  {locations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.building} ห้อง {loc.room || '-'} ({loc.name})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">ผู้รับผิดชอบคนใหม่</label>
+                <select
+                  value={editTransferForm.to_custodian_id}
+                  onChange={(e) =>
+                    setEditTransferForm({ ...editTransferForm, to_custodian_id: e.target.value })
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="">-- เลือกผู้รับผิดชอบคนใหม่ --</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.full_name} ({p.email})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">วันที่มีผลโอนย้าย *</label>
+                <input
+                  type="date"
+                  value={editTransferForm.effective_date}
+                  onChange={(e) =>
+                    setEditTransferForm({ ...editTransferForm, effective_date: e.target.value })
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+
+            {canApprove && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">สถานะใบโอนย้าย</label>
+                <select
+                  value={editTransferForm.status}
+                  onChange={(e) =>
+                    setEditTransferForm({
+                      ...editTransferForm,
+                      status: e.target.value as TransferStatus,
+                    })
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"
+                >
+                  {Object.entries(TRANSFER_STATUS_META).map(([k, m]) => (
+                    <option key={k} value={k}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">เหตุผลในการโอนย้าย *</label>
+              <textarea
+                rows={2}
+                value={editTransferForm.reason}
+                onChange={(e) =>
+                  setEditTransferForm({ ...editTransferForm, reason: e.target.value })
+                }
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">หมายเหตุ</label>
+              <input
+                type="text"
+                value={editTransferForm.notes}
+                onChange={(e) =>
+                  setEditTransferForm({ ...editTransferForm, notes: e.target.value })
+                }
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setEditingTransfer(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingEdit}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gov-700 px-4 py-2 text-xs font-semibold text-white hover:bg-gov-800"
+              >
+                {isSavingEdit && <Loader2 className="h-4 w-4 animate-spin" />}
+                บันทึกการแก้ไข
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={Boolean(deletingTransfer)}
+        onClose={() => setDeletingTransfer(null)}
+        onConfirm={handleConfirmDeleteTransfer}
+        title="ยืนยันการลบใบโอนย้ายครุภัณฑ์"
+        description={`คุณต้องการลบใบโอนย้ายเลขที่ "${deletingTransfer?.transfer_no || ''}" ออกจากระบบใช่หรือไม่?`}
+        confirmLabel="ยืนยันลบใบโอนย้าย"
+      />
     </div>
   );
 }

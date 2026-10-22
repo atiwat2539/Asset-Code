@@ -11,6 +11,7 @@ import {
   Loader2,
   Search,
   Edit3,
+  Trash2,
 } from 'lucide-react';
 import { assertSupabaseConfigured, isSupabaseConfigured, recordAuditLog, supabase } from '@/lib/supabase';
 import {
@@ -23,6 +24,7 @@ import { formatThaiDate, toISODateInput } from '@/lib/date';
 import { getSignedFileUrl, uploadFileToBucket } from '@/lib/storage';
 import { useAuth } from '@/features/auth/AuthContext';
 import {
+  ConfirmDialog,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -30,7 +32,7 @@ import {
   PageHeader,
   StatusBadge,
 } from '@/components/ui/common';
-import type { Asset, DisposalRequest, DisposalStatus } from '@/types/database';
+import type { Asset, DisposalReasonType, DisposalRequest, DisposalStatus } from '@/types/database';
 
 const disposalSchema = z.object({
   asset_id: z.string().min(1, 'กรุณาเลือกครุภัณฑ์ที่เสนอขอจำหน่าย'),
@@ -56,8 +58,12 @@ export function DisposalPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
 
-  // Workflow update state
+  // Workflow & Edit update state
   const [activeRequest, setActiveRequest] = useState<DisposalRequest | null>(null);
+  const [deletingRequest, setDeletingRequest] = useState<DisposalRequest | null>(null);
+  const [editReasonType, setEditReasonType] = useState<DisposalReasonType>('deteriorated');
+  const [editReasonDetail, setEditReasonDetail] = useState('');
+  const [editProposedDate, setEditProposedDate] = useState('');
   const [targetStatus, setTargetStatus] = useState<DisposalStatus>('under_review');
   const [docNo, setDocNo] = useState('');
   const [disposalMethod, setDisposalMethod] = useState<'sale' | 'transfer_out' | 'destroy' | 'write_off'>('write_off');
@@ -183,6 +189,9 @@ export function DisposalPage() {
 
   const openWorkflowModal = (req: DisposalRequest) => {
     setActiveRequest(req);
+    setEditReasonType(req.reason_type);
+    setEditReasonDetail(req.reason_detail || '');
+    setEditProposedDate(req.proposed_date || toISODateInput());
     setDocNo(req.document_no || '');
     setDisposalMethod(req.disposal_method || 'write_off');
     setSalvageValue(Number(req.salvage_value || 0));
@@ -198,10 +207,25 @@ export function DisposalPage() {
   const handleExecuteDisposalWorkflow = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeRequest) return;
+    if (!editReasonDetail.trim()) {
+      toast.error('กรุณาระบุรายละเอียดเหตุผลการขอจำหน่าย');
+      return;
+    }
 
     setIsProcessing(true);
     try {
       assertSupabaseConfigured();
+      // อัปเดตข้อมูลพื้นฐานของคำขอก่อน
+      const { error: baseErr } = await supabase
+        .from('disposal_requests')
+        .update({
+          reason_type: editReasonType,
+          reason_detail: editReasonDetail.trim(),
+          proposed_date: editProposedDate || activeRequest.proposed_date,
+        })
+        .eq('id', activeRequest.id);
+      if (baseErr) throw baseErr;
+
       const { error: rpcErr } = await supabase.rpc('process_disposal_workflow', {
         p_disposal_id: activeRequest.id,
         p_new_status: targetStatus,
@@ -214,7 +238,7 @@ export function DisposalPage() {
       if (rpcErr) throw rpcErr;
 
       toast.success(
-        `อัปเดตสถานะคำขอจำหน่ายเป็น "${DISPOSAL_STATUS_META[targetStatus].label}" สำเร็จ`
+        `บันทึกการแก้ไขและอัปเดตสถานะเป็น "${DISPOSAL_STATUS_META[targetStatus].label}" สำเร็จ`
       );
       setActiveRequest(null);
       queryClient.invalidateQueries({ queryKey: ['disposal-requests'] });
@@ -224,6 +248,40 @@ export function DisposalPage() {
       toast.error(translateSupabaseError(err));
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const handleConfirmDeleteDisposal = async () => {
+    if (!deletingRequest) return;
+    try {
+      assertSupabaseConfigured();
+      const { error: delErr } = await supabase
+        .from('disposal_requests')
+        .delete()
+        .eq('id', deletingRequest.id);
+      if (delErr) throw delErr;
+
+      if (deletingRequest.status === 'submitted' || deletingRequest.status === 'under_review') {
+        await supabase
+          .from('assets')
+          .update({ status: 'available' })
+          .eq('id', deletingRequest.asset_id);
+      }
+
+      await recordAuditLog({
+        action: 'DISPOSAL_REQUEST_DELETED',
+        entityType: 'disposal_requests',
+        entityId: deletingRequest.id,
+        summary: `ลบคำขอจำหน่ายเลขที่ ${deletingRequest.disposal_no}`,
+      });
+
+      toast.success(`ลบคำขอจำหน่ายเลขที่ ${deletingRequest.disposal_no} เรียบร้อยแล้ว`);
+      setDeletingRequest(null);
+      queryClient.invalidateQueries({ queryKey: ['disposal-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['assets-list'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
     }
   };
 
@@ -380,15 +438,25 @@ export function DisposalPage() {
                             <ExternalLink className="h-4 w-4" />
                           </button>
                         )}
-                        {canPropose && req.status !== 'disposed' && (
-                          <button
-                            type="button"
-                            onClick={() => openWorkflowModal(req)}
-                            className="inline-flex items-center gap-1 rounded-lg bg-gov-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-gov-800"
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                            ปรับขั้นตอน/อนุมัติ
-                          </button>
+                        {canPropose && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openWorkflowModal(req)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-gov-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-gov-800"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                              แก้ไข/อนุมัติ
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingRequest(req)}
+                              className="rounded-lg border border-rose-200 p-1.5 text-rose-600 hover:bg-rose-50"
+                              title="ลบคำขอจำหน่าย"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -539,14 +607,52 @@ export function DisposalPage() {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
+                <label className="block text-xs font-semibold text-slate-700">ประเภทสาเหตุการจำหน่าย</label>
+                <select
+                  value={editReasonType}
+                  onChange={(e) => setEditReasonType(e.target.value as DisposalReasonType)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  {Object.entries(DISPOSAL_REASON_LABELS).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">วันที่เสนอเรื่อง</label>
+                <input
+                  type="date"
+                  value={editProposedDate}
+                  onChange={(e) => setEditProposedDate(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
                 <label className="block text-xs font-semibold text-slate-700">
-                  ปรับเป็นสถานะขั้นตอนถัดไป
+                  รายละเอียดเหตุผลและความจำเป็นในการจำหน่าย <span className="text-rose-600">*</span>
+                </label>
+                <textarea
+                  rows={2}
+                  value={editReasonDetail}
+                  onChange={(e) => setEditReasonDetail(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">
+                  สถานะขั้นตอน (Workflow)
                 </label>
                 <select
                   value={targetStatus}
                   onChange={(e) => setTargetStatus(e.target.value as DisposalStatus)}
                   className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"
                 >
+                  <option value="draft">ร่างคำขอ (Draft)</option>
                   <option value="submitted">ส่งขออนุมัติ (Submitted)</option>
                   <option value="under_review">อยู่ระหว่างพิจารณา (Under Review)</option>
                   {isAdmin && (
@@ -637,6 +743,15 @@ export function DisposalPage() {
           </form>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(deletingRequest)}
+        onClose={() => setDeletingRequest(null)}
+        onConfirm={handleConfirmDeleteDisposal}
+        title="ยืนยันการลบคำขอจำหน่ายครุภัณฑ์"
+        description={`คุณต้องการลบคำขอจำหน่ายเลขที่ "${deletingRequest?.disposal_no || ''}" ออกจากระบบใช่หรือไม่?`}
+        confirmLabel="ยืนยันลบคำขอจำหน่าย"
+      />
     </div>
   );
 }

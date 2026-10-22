@@ -8,6 +8,7 @@ import {
   Plus,
   Wrench,
   Edit3,
+  Trash2,
   ExternalLink,
   Loader2,
   Search,
@@ -24,6 +25,7 @@ import { getSignedFileUrl, uploadFileToBucket } from '@/lib/storage';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useProfiles } from '@/hooks/useMasterData';
 import {
+  ConfirmDialog,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -31,7 +33,7 @@ import {
   PageHeader,
   StatusBadge,
 } from '@/components/ui/common';
-import type { Asset, MaintenanceRequest, MaintenanceStatus } from '@/types/database';
+import type { Asset, MaintenanceRequest, MaintenanceStatus, MaintenanceUrgency } from '@/types/database';
 
 const createTicketSchema = z.object({
   asset_id: z.string().min(1, 'กรุณาเลือกครุภัณฑ์ที่ชำรุดหรือต้องการบำรุงรักษา'),
@@ -58,6 +60,11 @@ export function MaintenancePage() {
 
   // Update Status & Cost Modal
   const [editingTicket, setEditingTicket] = useState<MaintenanceRequest | null>(null);
+  const [deletingTicket, setDeletingTicket] = useState<MaintenanceRequest | null>(null);
+  const [editIssueDescription, setEditIssueDescription] = useState('');
+  const [editUrgency, setEditUrgency] = useState<MaintenanceUrgency>('medium');
+  const [editReportedDate, setEditReportedDate] = useState('');
+  const [editEstimatedCost, setEditEstimatedCost] = useState(0);
   const [newStatus, setNewStatus] = useState<MaintenanceStatus>('in_progress');
   const [assignedTo, setAssignedTo] = useState('');
   const [vendorName, setVendorName] = useState('');
@@ -177,6 +184,10 @@ export function MaintenancePage() {
 
   const openManageModal = (ticket: MaintenanceRequest) => {
     setEditingTicket(ticket);
+    setEditIssueDescription(ticket.issue_description || '');
+    setEditUrgency(ticket.urgency);
+    setEditReportedDate(ticket.reported_date || toISODateInput());
+    setEditEstimatedCost(Number(ticket.estimated_cost || 0));
     setNewStatus(ticket.status);
     setAssignedTo(ticket.assigned_to || '');
     setVendorName(ticket.vendor_name || '');
@@ -189,6 +200,10 @@ export function MaintenancePage() {
   const handleSaveMaintenanceUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingTicket) return;
+    if (!editIssueDescription.trim()) {
+      toast.error('กรุณาระบุอาการชำรุด');
+      return;
+    }
 
     setIsUpdating(true);
     try {
@@ -197,6 +212,10 @@ export function MaintenancePage() {
       const { error: updateErr } = await supabase
         .from('maintenance_requests')
         .update({
+          issue_description: editIssueDescription.trim(),
+          urgency: editUrgency,
+          reported_date: editReportedDate || editingTicket.reported_date,
+          estimated_cost: Number(editEstimatedCost || 0),
           status: newStatus,
           assigned_to: assignedTo || null,
           vendor_name: vendorName.trim() || null,
@@ -255,6 +274,32 @@ export function MaintenancePage() {
       toast.error(translateSupabaseError(err));
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  const handleConfirmDeleteTicket = async () => {
+    if (!deletingTicket) return;
+    try {
+      assertSupabaseConfigured();
+      const { error: delErr } = await supabase
+        .from('maintenance_requests')
+        .delete()
+        .eq('id', deletingTicket.id);
+      if (delErr) throw delErr;
+
+      await recordAuditLog({
+        action: 'MAINTENANCE_DELETED',
+        entityType: 'maintenance_requests',
+        entityId: deletingTicket.id,
+        summary: `ลบใบแจ้งซ่อมเลขที่ ${deletingTicket.ticket_no}`,
+      });
+
+      toast.success(`ลบใบแจ้งซ่อมเลขที่ ${deletingTicket.ticket_no} เรียบร้อยแล้ว`);
+      setDeletingTicket(null);
+      queryClient.invalidateQueries({ queryKey: ['maintenance-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
     }
   };
 
@@ -430,15 +475,25 @@ export function MaintenancePage() {
                             <ExternalLink className="h-4 w-4" />
                           </button>
                         )}
-                        {canManage && (
-                          <button
-                            type="button"
-                            onClick={() => openManageModal(t)}
-                            className="inline-flex items-center gap-1 rounded-lg bg-gov-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-gov-800"
-                          >
-                            <Edit3 className="h-3.5 w-3.5" />
-                            อัปเดตสถานะ/ค่าซ่อม
-                          </button>
+                        {(canManage || t.reported_by === user?.id) && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openManageModal(t)}
+                              className="inline-flex items-center gap-1 rounded-lg bg-gov-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-gov-800"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                              แก้ไข/อัปเดต
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingTicket(t)}
+                              className="rounded-lg border border-rose-200 p-1.5 text-rose-600 hover:bg-rose-50"
+                              title="ลบใบแจ้งซ่อม"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -560,16 +615,66 @@ export function MaintenancePage() {
         </form>
       </Modal>
 
-      {/* Modal อัปเดตสถานะซ่อมและบันทึกค่าใช้จ่าย */}
+      {/* Modal แก้ไขข้อมูลใบแจ้งซ่อม อัปเดตสถานะซ่อม และบันทึกค่าใช้จ่าย */}
       <Modal
         open={Boolean(editingTicket)}
         onClose={() => setEditingTicket(null)}
-        title={`บันทึกผลการซ่อมและค่าใช้จ่าย: ${editingTicket?.ticket_no || ''}`}
-        description="เฉพาะเจ้าหน้าที่พัสดุหรือผู้ดูแลระบบเท่านั้นที่มีสิทธิ์แก้ไขสถานะและค่าใช้จ่าย"
+        title={`แก้ไขใบแจ้งซ่อม / บันทึกผลการซ่อม: ${editingTicket?.ticket_no || ''}`}
+        description="แก้ไขรายละเอียดอาการชำรุด ความเร่งด่วน สถานะการซ่อม และค่าใช้จ่าย"
       >
         {editingTicket && (
           <form onSubmit={handleSaveMaintenanceUpdate} className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">
+                อาการชำรุด / รายละเอียดปัญหา <span className="text-rose-600">*</span>
+              </label>
+              <textarea
+                rows={2}
+                value={editIssueDescription}
+                onChange={(e) => setEditIssueDescription(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">วันที่แจ้งซ่อม</label>
+                <input
+                  type="date"
+                  value={editReportedDate}
+                  onChange={(e) => setEditReportedDate(e.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">ความเร่งด่วน</label>
+                <select
+                  value={editUrgency}
+                  onChange={(e) => setEditUrgency(e.target.value as MaintenanceUrgency)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  {Object.entries(URGENCY_META).map(([key, meta]) => (
+                    <option key={key} value={key}>
+                      {meta.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">ประมาณการค่าซ่อม (บาท)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editEstimatedCost}
+                  onChange={(e) => setEditEstimatedCost(Number(e.target.value))}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 border-t border-slate-200 pt-3">
               <div>
                 <label className="block text-xs font-semibold text-slate-700">สถานะการซ่อมบำรุง</label>
                 <select
@@ -675,6 +780,15 @@ export function MaintenancePage() {
           </form>
         )}
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(deletingTicket)}
+        onClose={() => setDeletingTicket(null)}
+        onConfirm={handleConfirmDeleteTicket}
+        title="ยืนยันการลบใบแจ้งซ่อม"
+        description={`คุณต้องการลบใบแจ้งซ่อมเลขที่ "${deletingTicket?.ticket_no || ''}" ออกจากระบบใช่หรือไม่?`}
+        confirmLabel="ยืนยันลบใบแจ้งซ่อม"
+      />
     </div>
   );
 }

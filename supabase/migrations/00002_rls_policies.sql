@@ -163,7 +163,7 @@ CREATE POLICY "assets_update_staff"
 CREATE POLICY "assets_delete_admin"
   ON public.assets FOR DELETE
   TO authenticated
-  USING (public.is_admin());
+  USING (public.is_staff_or_admin());
 
 -- 4.6 asset_attachments
 CREATE POLICY "attachments_select_authenticated"
@@ -178,6 +178,12 @@ CREATE POLICY "attachments_select_authenticated"
 CREATE POLICY "attachments_insert_authenticated"
   ON public.asset_attachments FOR INSERT
   TO authenticated
+  WITH CHECK (public.is_staff_or_admin() OR uploaded_by = auth.uid());
+
+CREATE POLICY "attachments_update_staff"
+  ON public.asset_attachments FOR UPDATE
+  TO authenticated
+  USING (public.is_staff_or_admin() OR uploaded_by = auth.uid())
   WITH CHECK (public.is_staff_or_admin() OR uploaded_by = auth.uid());
 
 CREATE POLICY "attachments_delete_staff"
@@ -204,8 +210,13 @@ CREATE POLICY "transfers_insert_authenticated"
 CREATE POLICY "transfers_update_staff"
   ON public.asset_transfers FOR UPDATE
   TO authenticated
-  USING (public.is_staff_or_admin())
-  WITH CHECK (public.is_staff_or_admin());
+  USING (public.is_staff_or_admin() OR (requested_by = auth.uid() AND status = 'pending'))
+  WITH CHECK (public.is_staff_or_admin() OR (requested_by = auth.uid() AND status IN ('pending', 'cancelled')));
+
+CREATE POLICY "transfers_delete_staff"
+  ON public.asset_transfers FOR DELETE
+  TO authenticated
+  USING (public.is_staff_or_admin() OR (requested_by = auth.uid() AND status = 'pending'));
 
 -- 4.8 borrow_requests
 CREATE POLICY "borrow_requests_select"
@@ -230,6 +241,14 @@ CREATE POLICY "borrow_requests_update"
     OR (requester_id = auth.uid() AND status IN ('pending', 'cancelled'))
   );
 
+CREATE POLICY "borrow_requests_delete"
+  ON public.borrow_requests FOR DELETE
+  TO authenticated
+  USING (
+    public.is_staff_or_admin()
+    OR (requester_id = auth.uid() AND status = 'pending')
+  );
+
 -- 4.9 borrow_transactions
 CREATE POLICY "borrow_transactions_select"
   ON public.borrow_transactions FOR SELECT
@@ -248,6 +267,11 @@ CREATE POLICY "borrow_transactions_insert_staff"
   TO authenticated
   WITH CHECK (public.is_staff_or_admin());
 
+CREATE POLICY "borrow_transactions_delete_staff"
+  ON public.borrow_transactions FOR DELETE
+  TO authenticated
+  USING (public.is_staff_or_admin());
+
 -- 4.10 maintenance_requests
 CREATE POLICY "maintenance_requests_select"
   ON public.maintenance_requests FOR SELECT
@@ -265,6 +289,11 @@ CREATE POLICY "maintenance_requests_update"
   USING (public.is_staff_or_admin() OR (reported_by = auth.uid() AND status = 'pending'))
   WITH CHECK (public.is_staff_or_admin() OR (reported_by = auth.uid() AND status IN ('pending', 'cancelled')));
 
+CREATE POLICY "maintenance_requests_delete"
+  ON public.maintenance_requests FOR DELETE
+  TO authenticated
+  USING (public.is_staff_or_admin() OR (reported_by = auth.uid() AND status = 'pending'));
+
 -- 4.11 maintenance_logs
 CREATE POLICY "maintenance_logs_select"
   ON public.maintenance_logs FOR SELECT
@@ -281,6 +310,11 @@ CREATE POLICY "maintenance_logs_insert_staff"
   ON public.maintenance_logs FOR INSERT
   TO authenticated
   WITH CHECK (public.is_staff_or_admin());
+
+CREATE POLICY "maintenance_logs_delete_staff"
+  ON public.maintenance_logs FOR DELETE
+  TO authenticated
+  USING (public.is_staff_or_admin());
 
 -- 4.12 inventory_sessions & inventory_items
 CREATE POLICY "inventory_sessions_select"
@@ -321,6 +355,11 @@ CREATE POLICY "disposal_requests_update_staff"
   TO authenticated
   USING (public.is_staff_or_admin())
   WITH CHECK (public.is_staff_or_admin());
+
+CREATE POLICY "disposal_requests_delete_staff"
+  ON public.disposal_requests FOR DELETE
+  TO authenticated
+  USING (public.is_staff_or_admin());
 
 -- 4.14 corporate_events
 CREATE POLICY "corporate_events_select"

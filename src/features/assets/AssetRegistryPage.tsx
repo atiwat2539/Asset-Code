@@ -21,6 +21,8 @@ import {
   Image as ImageIcon,
   CheckCircle2,
   AlertTriangle,
+  Trash2,
+  Archive,
 } from 'lucide-react';
 import { assertSupabaseConfigured, isSupabaseConfigured, recordAuditLog, supabase } from '@/lib/supabase';
 import {
@@ -111,6 +113,8 @@ export function AssetRegistryPage() {
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [deletingAsset, setDeletingAsset] = useState<Asset | null>(null);
+  const [isDeletingAsset, setIsDeletingAsset] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [docFile, setDocFile] = useState<File | null>(null);
 
@@ -350,6 +354,70 @@ export function AssetRegistryPage() {
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
     } catch (err) {
       toast.error(translateSupabaseError(err));
+    }
+  };
+
+  const handleDeleteAsset = async () => {
+    if (!deletingAsset) return;
+    setIsDeletingAsset(true);
+    try {
+      assertSupabaseConfigured();
+      const { error: rpcErr } = await supabase.rpc('delete_asset_cascade', {
+        p_asset_id: deletingAsset.id,
+      });
+
+      if (rpcErr) {
+        const { error: delErr } = await supabase
+          .from('assets')
+          .delete()
+          .eq('id', deletingAsset.id);
+        if (delErr) throw delErr;
+
+        await recordAuditLog({
+          action: 'ASSET_DELETED',
+          entityType: 'assets',
+          entityId: deletingAsset.id,
+          summary: `ลบครุภัณฑ์ ${deletingAsset.asset_code} (${deletingAsset.name}) ออกจากระบบ`,
+        });
+      }
+
+      toast.success(`ลบครุภัณฑ์ ${deletingAsset.asset_code} ออกจากระบบเรียบร้อยแล้ว`);
+      setDeletingAsset(null);
+      queryClient.invalidateQueries({ queryKey: ['assets-list'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsDeletingAsset(false);
+    }
+  };
+
+  const handleArchiveAsset = async () => {
+    if (!deletingAsset) return;
+    setIsDeletingAsset(true);
+    try {
+      assertSupabaseConfigured();
+      const { error: archErr } = await supabase
+        .from('assets')
+        .update({ is_archived: true, updated_by: user?.id || null })
+        .eq('id', deletingAsset.id);
+      if (archErr) throw archErr;
+
+      await recordAuditLog({
+        action: 'ASSET_ARCHIVED',
+        entityType: 'assets',
+        entityId: deletingAsset.id,
+        summary: `ย้ายครุภัณฑ์ ${deletingAsset.asset_code} (${deletingAsset.name}) เข้าแฟ้มประวัติ (Archive)`,
+      });
+
+      toast.success(`ย้ายครุภัณฑ์ ${deletingAsset.asset_code} เข้าแฟ้มประวัติเรียบร้อยแล้ว`);
+      setDeletingAsset(null);
+      queryClient.invalidateQueries({ queryKey: ['assets-list'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsDeletingAsset(false);
     }
   };
 
@@ -925,14 +993,24 @@ export function AssetRegistryPage() {
                             <QrCode className="h-4 w-4" />
                           </Link>
                           {canEdit && (
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(asset)}
-                              className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 hover:text-gov-700"
-                              title="แก้ไขข้อมูลครุภัณฑ์"
-                            >
-                              <Edit3 className="h-4 w-4" />
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => openEditModal(asset)}
+                                className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 hover:text-gov-700"
+                                title="แก้ไขข้อมูลครุภัณฑ์"
+                              >
+                                <Edit3 className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setDeletingAsset(asset)}
+                                className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                                title="ลบครุภัณฑ์"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -1332,6 +1410,74 @@ export function AssetRegistryPage() {
             </div>
           )}
         </div>
+      </Modal>
+
+      {/* Modal ยืนยันการลบครุภัณฑ์ */}
+      <Modal
+        open={Boolean(deletingAsset)}
+        onClose={() => setDeletingAsset(null)}
+        title="ยืนยันการลบรายการครุภัณฑ์"
+        description="กรุณาตรวจสอบรายละเอียดครุภัณฑ์ก่อนดำเนินการลบ"
+        maxWidth="max-w-md"
+      >
+        {deletingAsset && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs text-rose-900">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+              <div className="space-y-1">
+                <p className="font-bold">คุณต้องการลบครุภัณฑ์รายการนี้ใช่หรือไม่?</p>
+                <p>
+                  เลขครุภัณฑ์: <strong className="font-mono">{deletingAsset.asset_code}</strong>
+                </p>
+                <p>
+                  ชื่อครุภัณฑ์: <strong>{deletingAsset.name}</strong>
+                </p>
+                <p>
+                  ราคาต่อหน่วย: <strong>{formatCurrency(deletingAsset.unit_price)}</strong>
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-900 leading-relaxed">
+              <strong>ตัวเลือกแนะนำ:</strong> หากต้องการซ่อนออกจากหน้าทะเบียนโดยยังเก็บประวัติไว้ตรวจสอบย้อนหลัง สามารถกดปุ่ม{' '}
+              <strong>&ldquo;เก็บเข้าแฟ้มประวัติ (Archive)&rdquo;</strong> หรือกด{' '}
+              <strong>&ldquo;ยืนยันการลบถาวร&rdquo;</strong> เพื่อลบออกจากฐานข้อมูลทั้งหมด
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setDeletingAsset(null)}
+                disabled={isDeletingAsset}
+                className="rounded-lg border border-slate-300 px-3.5 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                onClick={handleArchiveAsset}
+                disabled={isDeletingAsset}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+              >
+                <Archive className="h-3.5 w-3.5" />
+                เก็บเข้าแฟ้มประวัติ
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAsset}
+                disabled={isDeletingAsset}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-rose-700"
+              >
+                {isDeletingAsset ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                ยืนยันการลบถาวร
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );

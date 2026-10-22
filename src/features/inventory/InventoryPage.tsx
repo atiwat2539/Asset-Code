@@ -12,6 +12,8 @@ import {
   FileText,
   CheckCircle2,
   Loader2,
+  Edit3,
+  Trash2,
 } from 'lucide-react';
 import { assertSupabaseConfigured, isSupabaseConfigured, recordAuditLog, supabase } from '@/lib/supabase';
 import {
@@ -23,6 +25,7 @@ import { exportToExcel, exportToPDF } from '@/lib/export';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useDepartments, useLocations, useProfiles, useSystemSettings } from '@/hooks/useMasterData';
 import {
+  ConfirmDialog,
   EmptyState,
   LoadingState,
   Modal,
@@ -57,6 +60,9 @@ export function InventoryPage() {
 
   const [selectedSessionId, setSelectedSessionId] = useState<string>('');
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
+  const [editingSession, setEditingSession] = useState<InventorySession | null>(null);
+  const [deletingSession, setDeletingSession] = useState<InventorySession | null>(null);
+  const [deletingItem, setDeletingItem] = useState<InventoryItem | null>(null);
 
   // ฟอร์มบันทึกผลตรวจนับ
   const [scanCode, setScanCode] = useState('');
@@ -137,6 +143,36 @@ export function InventoryPage() {
     },
   });
 
+  const openCreateSessionModal = () => {
+    setEditingSession(null);
+    reset({
+      session_code: `INV-${getThaiFiscalYear()}-${String(sessions.length + 1).padStart(2, '0')}`,
+      name: `การตรวจสอบพัสดุประจำปีงบประมาณ พ.ศ. ${getThaiFiscalYear()}`,
+      fiscal_year: getThaiFiscalYear(),
+      start_date: toISODateInput(),
+      end_date: toISODateInput(),
+      department_id: '',
+      responsible_id: '',
+      notes: '',
+    });
+    setIsSessionModalOpen(true);
+  };
+
+  const openEditSessionModal = (session: InventorySession) => {
+    setEditingSession(session);
+    reset({
+      session_code: session.session_code,
+      name: session.name,
+      fiscal_year: session.fiscal_year,
+      start_date: session.start_date,
+      end_date: session.end_date,
+      department_id: session.department_id || '',
+      responsible_id: session.responsible_id || '',
+      notes: session.notes || '',
+    });
+    setIsSessionModalOpen(true);
+  };
+
   const onCreateSession = async (values: SessionFormValues) => {
     try {
       assertSupabaseConfigured();
@@ -145,37 +181,120 @@ export function InventoryPage() {
         return;
       }
 
-      const { data, error } = await supabase
-        .from('inventory_sessions')
-        .insert({
-          session_code: values.session_code.trim(),
-          name: values.name.trim(),
-          fiscal_year: values.fiscal_year,
-          start_date: values.start_date,
-          end_date: values.end_date,
-          department_id: values.department_id || null,
-          responsible_id: values.responsible_id || user?.id || null,
-          notes: values.notes?.trim() || null,
-          status: 'in_progress',
-          created_by: user?.id || null,
-        })
-        .select('id')
-        .single();
+      if (editingSession) {
+        const { error } = await supabase
+          .from('inventory_sessions')
+          .update({
+            session_code: values.session_code.trim(),
+            name: values.name.trim(),
+            fiscal_year: values.fiscal_year,
+            start_date: values.start_date,
+            end_date: values.end_date,
+            department_id: values.department_id || null,
+            responsible_id: values.responsible_id || user?.id || null,
+            notes: values.notes?.trim() || null,
+          })
+          .eq('id', editingSession.id);
 
+        if (error) throw error;
+
+        await recordAuditLog({
+          action: 'INVENTORY_SESSION_UPDATED',
+          entityType: 'inventory_sessions',
+          entityId: editingSession.id,
+          summary: `แก้ไขรอบตรวจนับครุภัณฑ์ ${values.session_code} (${values.name})`,
+        });
+
+        toast.success('แก้ไขข้อมูลรอบตรวจนับสำเร็จ');
+      } else {
+        const { data, error } = await supabase
+          .from('inventory_sessions')
+          .insert({
+            session_code: values.session_code.trim(),
+            name: values.name.trim(),
+            fiscal_year: values.fiscal_year,
+            start_date: values.start_date,
+            end_date: values.end_date,
+            department_id: values.department_id || null,
+            responsible_id: values.responsible_id || user?.id || null,
+            notes: values.notes?.trim() || null,
+            status: 'in_progress',
+            created_by: user?.id || null,
+          })
+          .select('id')
+          .single();
+
+        if (error) throw error;
+
+        await recordAuditLog({
+          action: 'INVENTORY_SESSION_CREATED',
+          entityType: 'inventory_sessions',
+          entityId: data.id,
+          summary: `สร้างรอบตรวจนับครุภัณฑ์ ${values.session_code} (${values.name})`,
+        });
+
+        toast.success('สร้างรอบตรวจนับครุภัณฑ์ประจำปีสำเร็จ');
+        setSelectedSessionId(data.id);
+      }
+
+      setIsSessionModalOpen(false);
+      setEditingSession(null);
+      reset();
+      queryClient.invalidateQueries({ queryKey: ['inventory-sessions'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    }
+  };
+
+  const handleConfirmDeleteSession = async () => {
+    if (!deletingSession) return;
+    try {
+      assertSupabaseConfigured();
+      const { error } = await supabase
+        .from('inventory_sessions')
+        .delete()
+        .eq('id', deletingSession.id);
       if (error) throw error;
 
       await recordAuditLog({
-        action: 'INVENTORY_SESSION_CREATED',
+        action: 'INVENTORY_SESSION_DELETED',
         entityType: 'inventory_sessions',
-        entityId: data.id,
-        summary: `สร้างรอบตรวจนับครุภัณฑ์ ${values.session_code} (${values.name})`,
+        entityId: deletingSession.id,
+        summary: `ลบรอบตรวจนับครุภัณฑ์ ${deletingSession.session_code} (${deletingSession.name})`,
       });
 
-      toast.success('สร้างรอบตรวจนับครุภัณฑ์ประจำปีสำเร็จ');
-      setSelectedSessionId(data.id);
-      setIsSessionModalOpen(false);
-      reset();
+      toast.success(`ลบรอบตรวจนับ "${deletingSession.session_code}" สำเร็จ`);
+      if (selectedSessionId === deletingSession.id) {
+        setSelectedSessionId('');
+      }
+      setDeletingSession(null);
       queryClient.invalidateQueries({ queryKey: ['inventory-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-items'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    }
+  };
+
+  const handleConfirmDeleteItem = async () => {
+    if (!deletingItem || !activeSession) return;
+    try {
+      assertSupabaseConfigured();
+      const { error } = await supabase
+        .from('inventory_items')
+        .delete()
+        .eq('id', deletingItem.id);
+      if (error) throw error;
+
+      await recordAuditLog({
+        action: 'INVENTORY_ITEM_DELETED',
+        entityType: 'inventory_items',
+        entityId: deletingItem.id,
+        summary: `ลบรายการผลตรวจนับของครุภัณฑ์ ${deletingItem.asset?.asset_code || deletingItem.asset_id}`,
+      });
+
+      toast.success('ลบรายการผลตรวจนับเรียบร้อยแล้ว');
+      setDeletingItem(null);
+      queryClient.invalidateQueries({ queryKey: ['inventory-items', activeSession.id] });
     } catch (err) {
       toast.error(translateSupabaseError(err));
     }
@@ -352,7 +471,7 @@ export function InventoryPage() {
             {canManage && (
               <button
                 type="button"
-                onClick={() => setIsSessionModalOpen(true)}
+                onClick={openCreateSessionModal}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-gov-700 px-3.5 py-2 text-xs font-semibold text-white hover:bg-gov-800"
               >
                 <Plus className="h-4 w-4" />
@@ -408,9 +527,33 @@ export function InventoryPage() {
               </div>
 
               {activeSession && (
-                <div className="text-xs text-slate-600">
-                  ช่วงเวลาตรวจนับ: <strong>{formatThaiDate(activeSession.start_date)}</strong> ถึง{' '}
-                  <strong>{formatThaiDate(activeSession.end_date)}</strong>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="text-xs text-slate-600">
+                    ช่วงเวลาตรวจนับ: <strong>{formatThaiDate(activeSession.start_date)}</strong> ถึง{' '}
+                    <strong>{formatThaiDate(activeSession.end_date)}</strong>
+                  </div>
+                  {canManage && (
+                    <div className="inline-flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => openEditSessionModal(activeSession)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                        title="แก้ไขรอบตรวจนับนี้"
+                      >
+                        <Edit3 className="h-3.5 w-3.5" />
+                        แก้ไขรอบ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDeletingSession(activeSession)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                        title="ลบรอบตรวจนับนี้"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        ลบรอบ
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -605,12 +748,13 @@ export function InventoryPage() {
                       <th className="p-3">ผลการตรวจนับ</th>
                       <th className="p-3">ผู้ตรวจนับ / เวลา</th>
                       <th className="p-3">หมายเหตุ</th>
+                      {canManage && <th className="p-3 text-right">จัดการ</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 text-xs">
                     {sessionItems.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="p-8 text-center text-slate-400">
+                        <td colSpan={canManage ? 8 : 7} className="p-8 text-center text-slate-400">
                           ยังไม่มีการบันทึกผลตรวจนับในรอบนี้
                         </td>
                       </tr>
@@ -646,6 +790,34 @@ export function InventoryPage() {
                             </p>
                           </td>
                           <td className="p-3 text-slate-600">{item.notes || '-'}</td>
+                          {canManage && (
+                            <td className="p-3 text-right whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedAssetId(item.asset_id);
+                                    setResultStatus(item.result_status);
+                                    setActualLocationId(item.actual_location_id || '');
+                                    setItemNotes(item.notes || '');
+                                    toast.info(`ดึงข้อมูล ${item.asset?.asset_code || ''} ขึ้นฟอร์มแก้ไขด้านบนแล้ว`);
+                                  }}
+                                  className="rounded-md p-1.5 text-slate-600 hover:bg-slate-100"
+                                  title="แก้ไขผลตรวจนับ"
+                                >
+                                  <Edit3 className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setDeletingItem(item)}
+                                  className="rounded-md p-1.5 text-rose-600 hover:bg-rose-50"
+                                  title="ลบรายการตรวจนับ"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          )}
                         </tr>
                       ))
                     )}
@@ -657,11 +829,14 @@ export function InventoryPage() {
         </>
       )}
 
-      {/* Modal สร้างรอบตรวจนับใหม่ */}
+      {/* Modal สร้าง/แก้ไขรอบตรวจนับ */}
       <Modal
         open={isSessionModalOpen}
-        onClose={() => setIsSessionModalOpen(false)}
-        title="สร้างรอบการตรวจนับครุภัณฑ์ประจำปี"
+        onClose={() => {
+          setIsSessionModalOpen(false);
+          setEditingSession(null);
+        }}
+        title={editingSession ? 'แก้ไขรอบการตรวจนับครุภัณฑ์' : 'สร้างรอบการตรวจนับครุภัณฑ์ประจำปี'}
         description="กำหนดรหัสรอบ ปีงบประมาณ ช่วงเวลา และผู้รับผิดชอบการตรวจนับ"
       >
         <form onSubmit={handleSubmit(onCreateSession)} className="space-y-4">
@@ -768,7 +943,10 @@ export function InventoryPage() {
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
             <button
               type="button"
-              onClick={() => setIsSessionModalOpen(false)}
+              onClick={() => {
+                setIsSessionModalOpen(false);
+                setEditingSession(null);
+              }}
               className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700"
             >
               ยกเลิก
@@ -779,11 +957,29 @@ export function InventoryPage() {
               className="inline-flex items-center gap-2 rounded-lg bg-gov-700 px-4 py-2 text-xs font-semibold text-white hover:bg-gov-800"
             >
               {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              สร้างรอบตรวจนับ
+              {editingSession ? 'บันทึกการแก้ไข' : 'สร้างรอบตรวจนับ'}
             </button>
           </div>
         </form>
       </Modal>
+
+      <ConfirmDialog
+        open={Boolean(deletingSession)}
+        onClose={() => setDeletingSession(null)}
+        onConfirm={handleConfirmDeleteSession}
+        title="ยืนยันการลบรอบตรวจนับ"
+        description={`คุณต้องการลบรอบตรวจนับ "${deletingSession?.session_code} — ${deletingSession?.name}" พร้อมรายการตรวจนับทั้งหมดในรอบนี้ใช่หรือไม่?`}
+        confirmLabel="ยืนยันลบรอบตรวจนับ"
+      />
+
+      <ConfirmDialog
+        open={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={handleConfirmDeleteItem}
+        title="ยืนยันการลบรายการผลตรวจนับ"
+        description={`คุณต้องการลบผลการตรวจนับของครุภัณฑ์ "${deletingItem?.asset?.asset_code || ''} — ${deletingItem?.asset?.name || ''}" ใช่หรือไม่?`}
+        confirmLabel="ยืนยันลบรายการ"
+      />
     </div>
   );
 }

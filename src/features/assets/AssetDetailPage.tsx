@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { QRCodeSVG } from 'qrcode.react';
 import { toast } from 'sonner';
@@ -10,6 +10,7 @@ import {
   Upload,
   ExternalLink,
   Trash2,
+  Edit3,
   Package,
   ArrowLeftRight,
   Repeat,
@@ -32,10 +33,12 @@ import {
 import { formatThaiDate, formatThaiDateTime } from '@/lib/date';
 import { getSignedFileUrl, uploadFileToBucket, type StorageBucketName } from '@/lib/storage';
 import { useAuth } from '@/features/auth/AuthContext';
-import { ConfirmDialog, ErrorState, LoadingState, StatusBadge } from '@/components/ui/common';
+import { useCategories, useDepartments, useLocations, useProfiles } from '@/hooks/useMasterData';
+import { ConfirmDialog, ErrorState, LoadingState, Modal, StatusBadge } from '@/components/ui/common';
 import type {
   Asset,
   AssetAttachment,
+  AssetStatus,
   AssetTransfer,
   AuditLog,
   BorrowRequest,
@@ -54,14 +57,44 @@ type TabKey =
 
 export function AssetDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { user, hasRole } = useAuth();
   const canEdit = hasRole(['admin', 'asset_officer']);
   const queryClient = useQueryClient();
   const configured = isSupabaseConfigured();
 
+  const { data: categories = [] } = useCategories();
+  const { data: departments = [] } = useDepartments();
+  const { data: locations = [] } = useLocations();
+  const { data: profiles = [] } = useProfiles();
+
   const [activeTab, setActiveTab] = useState<TabKey>('general');
   const [uploadingFile, setUploadingFile] = useState(false);
   const [attachmentToDelete, setAttachmentToDelete] = useState<AssetAttachment | null>(null);
+  const [editingAttachment, setEditingAttachment] = useState<AssetAttachment | null>(null);
+  const [attFileName, setAttFileName] = useState('');
+  const [attCategory, setAttCategory] = useState<AssetAttachment['category']>('procurement');
+  const [isSavingAtt, setIsSavingAtt] = useState(false);
+
+  // Edit & Delete Asset State
+  const [isEditAssetOpen, setIsEditAssetOpen] = useState(false);
+  const [isDeleteAssetOpen, setIsDeleteAssetOpen] = useState(false);
+  const [isSavingAsset, setIsSavingAsset] = useState(false);
+  const [editForm, setEditForm] = useState({
+    asset_code: '',
+    name: '',
+    category_id: '',
+    brand: '',
+    model: '',
+    serial_number: '',
+    unit_price: 0,
+    status: 'available' as AssetStatus,
+    department_id: '',
+    location_id: '',
+    custodian_id: '',
+    description: '',
+    notes: '',
+  });
 
   const {
     data: detail,
@@ -223,6 +256,127 @@ export function AssetDetailPage() {
     }
   };
 
+  const openEditAssetModal = () => {
+    if (!detail?.asset) return;
+    const a = detail.asset;
+    setEditForm({
+      asset_code: a.asset_code,
+      name: a.name,
+      category_id: a.category_id || '',
+      brand: a.brand || '',
+      model: a.model || '',
+      serial_number: a.serial_number || '',
+      unit_price: Number(a.unit_price || 0),
+      status: a.status,
+      department_id: a.department_id || '',
+      location_id: a.location_id || '',
+      custodian_id: a.custodian_id || '',
+      description: a.description || '',
+      notes: a.notes || '',
+    });
+    setIsEditAssetOpen(true);
+  };
+
+  const handleSaveEditAsset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !editForm.asset_code.trim() || !editForm.name.trim()) {
+      toast.error('กรุณาระบุเลขครุภัณฑ์และชื่อครุภัณฑ์');
+      return;
+    }
+    setIsSavingAsset(true);
+    try {
+      assertSupabaseConfigured();
+      const { error: updErr } = await supabase
+        .from('assets')
+        .update({
+          asset_code: editForm.asset_code.trim(),
+          name: editForm.name.trim(),
+          category_id: editForm.category_id || null,
+          brand: editForm.brand.trim() || null,
+          model: editForm.model.trim() || null,
+          serial_number: editForm.serial_number.trim() || null,
+          unit_price: Number(editForm.unit_price || 0),
+          status: editForm.status,
+          department_id: editForm.department_id || null,
+          location_id: editForm.location_id || null,
+          custodian_id: editForm.custodian_id || null,
+          description: editForm.description.trim() || null,
+          notes: editForm.notes.trim() || null,
+          updated_by: user?.id || null,
+        })
+        .eq('id', id);
+      if (updErr) throw updErr;
+
+      await recordAuditLog({
+        action: 'ASSET_UPDATED',
+        entityType: 'assets',
+        entityId: id,
+        summary: `แก้ไขข้อมูลครุภัณฑ์ ${editForm.asset_code.trim()} (${editForm.name.trim()})`,
+      });
+
+      toast.success('บันทึกการแก้ไขข้อมูลครุภัณฑ์สำเร็จ');
+      setIsEditAssetOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['asset-detail', id] });
+      queryClient.invalidateQueries({ queryKey: ['assets-list'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsSavingAsset(false);
+    }
+  };
+
+  const handleConfirmDeleteAsset = async () => {
+    if (!id || !detail?.asset) return;
+    try {
+      assertSupabaseConfigured();
+      const { error: rpcErr } = await supabase.rpc('delete_asset_cascade', {
+        p_asset_id: id,
+      });
+      if (rpcErr) {
+        const { error: delErr } = await supabase.from('assets').delete().eq('id', id);
+        if (delErr) throw delErr;
+      }
+      toast.success(`ลบครุภัณฑ์ "${detail.asset.asset_code}" เรียบร้อยแล้ว`);
+      setIsDeleteAssetOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['assets-list'] });
+      navigate('/assets');
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    }
+  };
+
+  const handleSaveEditAttachment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAttachment || !id || !attFileName.trim()) return;
+    setIsSavingAtt(true);
+    try {
+      assertSupabaseConfigured();
+      const { error: updErr } = await supabase
+        .from('asset_attachments')
+        .update({
+          file_name: attFileName.trim(),
+          category: attCategory,
+        })
+        .eq('id', editingAttachment.id);
+      if (updErr) throw updErr;
+
+      await recordAuditLog({
+        action: 'ATTACHMENT_UPDATED',
+        entityType: 'assets',
+        entityId: id,
+        summary: `แก้ไขชื่อ/หมวดหมู่ไฟล์แนบเป็น "${attFileName.trim()}" (${attCategory})`,
+      });
+
+      toast.success('แก้ไขข้อมูลไฟล์แนบสำเร็จ');
+      setEditingAttachment(null);
+      queryClient.invalidateQueries({ queryKey: ['asset-detail', id] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsSavingAtt(false);
+    }
+  };
+
   if (isLoading) {
     return <LoadingState message="กำลังโหลดข้อมูลรายละเอียดครุภัณฑ์..." />;
   }
@@ -276,7 +430,27 @@ export function AssetDetailPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {canEdit && (
+            <>
+              <button
+                type="button"
+                onClick={openEditAssetModal}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                <Edit3 className="h-4 w-4" />
+                แก้ไขข้อมูลครุภัณฑ์
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsDeleteAssetOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+              >
+                <Trash2 className="h-4 w-4" />
+                ลบครุภัณฑ์
+              </button>
+            </>
+          )}
           <Link
             to={`/qr-barcode?assetId=${asset.id}`}
             className="inline-flex items-center gap-1.5 rounded-lg bg-gov-700 px-3.5 py-2 text-xs font-semibold text-white hover:bg-gov-800"
@@ -718,14 +892,28 @@ export function AssetDetailPage() {
                               เปิดดูไฟล์
                             </button>
                             {canEdit && (
-                              <button
-                                type="button"
-                                onClick={() => setAttachmentToDelete(att)}
-                                className="rounded-md p-1 text-rose-600 hover:bg-rose-50"
-                                title="ลบไฟล์แนบ"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingAttachment(att);
+                                    setAttFileName(att.file_name);
+                                    setAttCategory(att.category);
+                                  }}
+                                  className="rounded-md p-1 text-slate-600 hover:bg-slate-100"
+                                  title="แก้ไขชื่อ/หมวดหมู่ไฟล์แนบ"
+                                >
+                                  <Edit3 className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setAttachmentToDelete(att)}
+                                  className="rounded-md p-1 text-rose-600 hover:bg-rose-50"
+                                  title="ลบไฟล์แนบ"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>
@@ -782,6 +970,244 @@ export function AssetDetailPage() {
         description={`คุณต้องการลบไฟล์ "${attachmentToDelete?.file_name || ''}" ออกจาก Storage และฐานข้อมูลใช่หรือไม่?`}
         confirmLabel="ยืนยันลบไฟล์"
       />
+
+      <ConfirmDialog
+        open={isDeleteAssetOpen}
+        onClose={() => setIsDeleteAssetOpen(false)}
+        onConfirm={handleConfirmDeleteAsset}
+        title="ยืนยันการลบครุภัณฑ์ถาวร"
+        description={`คุณต้องการลบครุภัณฑ์ "${asset.asset_code} — ${asset.name}" และประวัติที่เกี่ยวข้องทั้งหมดออกจากระบบใช่หรือไม่?`}
+        confirmLabel="ยืนยันลบครุภัณฑ์"
+      />
+
+      {/* Modal แก้ไขข้อมูลครุภัณฑ์ */}
+      <Modal
+        open={isEditAssetOpen}
+        onClose={() => setIsEditAssetOpen(false)}
+        title={`แก้ไขข้อมูลครุภัณฑ์: ${asset.asset_code}`}
+        maxWidth="max-w-2xl"
+      >
+        <form onSubmit={handleSaveEditAsset} className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">เลขครุภัณฑ์ *</label>
+              <input
+                type="text"
+                value={editForm.asset_code}
+                onChange={(e) => setEditForm({ ...editForm, asset_code: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">ชื่อครุภัณฑ์ *</label>
+              <input
+                type="text"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">หมวดหมู่ครุภัณฑ์</label>
+              <select
+                value={editForm.category_id}
+                onChange={(e) => setEditForm({ ...editForm, category_id: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">-- ไม่ระบุ --</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.code} - {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">สถานะครุภัณฑ์</label>
+              <select
+                value={editForm.status}
+                onChange={(e) => setEditForm({ ...editForm, status: e.target.value as AssetStatus })}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"
+              >
+                {Object.entries(ASSET_STATUS_META).map(([k, m]) => (
+                  <option key={k} value={k}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">ยี่ห้อ</label>
+              <input
+                type="text"
+                value={editForm.brand}
+                onChange={(e) => setEditForm({ ...editForm, brand: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">รุ่น (Model)</label>
+              <input
+                type="text"
+                value={editForm.model}
+                onChange={(e) => setEditForm({ ...editForm, model: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">Serial Number</label>
+              <input
+                type="text"
+                value={editForm.serial_number}
+                onChange={(e) => setEditForm({ ...editForm, serial_number: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">ราคาต่อหน่วย (บาท)</label>
+              <input
+                type="number"
+                step="0.01"
+                value={editForm.unit_price}
+                onChange={(e) => setEditForm({ ...editForm, unit_price: Number(e.target.value) })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">หน่วยงานผู้ครอบครอง</label>
+              <select
+                value={editForm.department_id}
+                onChange={(e) => setEditForm({ ...editForm, department_id: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">-- ไม่ระบุ --</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.code} - {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">สถานที่ตั้งปัจจุบัน</label>
+              <select
+                value={editForm.location_id}
+                onChange={(e) => setEditForm({ ...editForm, location_id: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">-- ไม่ระบุ --</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.building} ห้อง {loc.room || '-'} ({loc.name})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-slate-700">ผู้รับผิดชอบดูแล</label>
+              <select
+                value={editForm.custodian_id}
+                onChange={(e) => setEditForm({ ...editForm, custodian_id: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">-- ไม่ระบุ --</option>
+                {profiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.full_name} ({p.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700">รายละเอียดคุณลักษณะ</label>
+            <textarea
+              rows={2}
+              value={editForm.description}
+              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700">หมายเหตุ</label>
+            <input
+              type="text"
+              value={editForm.notes}
+              onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => setIsEditAssetOpen(false)}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={isSavingAsset}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gov-700 px-4 py-2 text-xs font-semibold text-white hover:bg-gov-800"
+            >
+              {isSavingAsset && <Loader2 className="h-4 w-4 animate-spin" />}
+              บันทึกการแก้ไข
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal แก้ไขไฟล์แนบ */}
+      <Modal
+        open={Boolean(editingAttachment)}
+        onClose={() => setEditingAttachment(null)}
+        title="แก้ไขข้อมูลไฟล์แนบ"
+        maxWidth="max-w-md"
+      >
+        <form onSubmit={handleSaveEditAttachment} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700">ชื่อไฟล์ *</label>
+            <input
+              type="text"
+              value={attFileName}
+              onChange={(e) => setAttFileName(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700">ประเภทเอกสาร</label>
+            <select
+              value={attCategory}
+              onChange={(e) => setAttCategory(e.target.value as AssetAttachment['category'])}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+            >
+              <option value="procurement">เอกสารจัดซื้อ/ใบตรวจรับ (procurement)</option>
+              <option value="image">รูปภาพครุภัณฑ์ (image)</option>
+              <option value="inspection">เอกสารตรวจนับ/ตรวจสอบ (inspection)</option>
+              <option value="warranty">เอกสารรับประกัน (warranty)</option>
+              <option value="manual">คู่มือการใช้งาน (manual)</option>
+              <option value="general">เอกสารทั่วไป (general)</option>
+            </select>
+          </div>
+          <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+            <button
+              type="button"
+              onClick={() => setEditingAttachment(null)}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700"
+            >
+              ยกเลิก
+            </button>
+            <button
+              type="submit"
+              disabled={isSavingAtt}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gov-700 px-4 py-2 text-xs font-semibold text-white hover:bg-gov-800"
+            >
+              {isSavingAtt && <Loader2 className="h-4 w-4 animate-spin" />}
+              บันทึก
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

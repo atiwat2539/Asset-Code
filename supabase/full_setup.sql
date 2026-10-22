@@ -1,9 +1,4 @@
-﻿-- ============================================================================
--- FULL SUPABASE SETUP SCRIPT (Schema + RLS + RPC + Storage + Seed Data + Admin)
--- คัดลอกไฟล์นี้ไปรันใน Supabase SQL Editor เพียงครั้งเดียวเพื่อติดตั้งฐานข้อมูลทั้งหมด
--- ============================================================================
-
--- >>> START OF supabase/migrations/00001_initial_schema.sql <<<
+-- === supabase/migrations/00001_initial_schema.sql ===
 -- =============================================================================
 -- Migration 00001: โครงสร้างฐานข้อมูลระบบบริหารจัดการครุภัณฑ์สำนักงานหน่วยงานราชการ
 -- ครอบคลุม 18 ตารางหลัก, Constraints, Indexes และ Triggers
@@ -532,7 +527,7 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON public.notifications(user_id, is_read);
 
 
--- >>> START OF supabase/migrations/00002_rls_policies.sql <<<
+-- === supabase/migrations/00002_rls_policies.sql ===
 -- =============================================================================
 -- Migration 00002: Row Level Security (RLS) และการป้องกันการยกระดับสิทธิ์ด้วยตนเอง
 -- =============================================================================
@@ -698,7 +693,7 @@ CREATE POLICY "assets_update_staff"
 CREATE POLICY "assets_delete_admin"
   ON public.assets FOR DELETE
   TO authenticated
-  USING (public.is_admin());
+  USING (public.is_staff_or_admin());
 
 -- 4.6 asset_attachments
 CREATE POLICY "attachments_select_authenticated"
@@ -713,6 +708,12 @@ CREATE POLICY "attachments_select_authenticated"
 CREATE POLICY "attachments_insert_authenticated"
   ON public.asset_attachments FOR INSERT
   TO authenticated
+  WITH CHECK (public.is_staff_or_admin() OR uploaded_by = auth.uid());
+
+CREATE POLICY "attachments_update_staff"
+  ON public.asset_attachments FOR UPDATE
+  TO authenticated
+  USING (public.is_staff_or_admin() OR uploaded_by = auth.uid())
   WITH CHECK (public.is_staff_or_admin() OR uploaded_by = auth.uid());
 
 CREATE POLICY "attachments_delete_staff"
@@ -739,8 +740,13 @@ CREATE POLICY "transfers_insert_authenticated"
 CREATE POLICY "transfers_update_staff"
   ON public.asset_transfers FOR UPDATE
   TO authenticated
-  USING (public.is_staff_or_admin())
-  WITH CHECK (public.is_staff_or_admin());
+  USING (public.is_staff_or_admin() OR (requested_by = auth.uid() AND status = 'pending'))
+  WITH CHECK (public.is_staff_or_admin() OR (requested_by = auth.uid() AND status IN ('pending', 'cancelled')));
+
+CREATE POLICY "transfers_delete_staff"
+  ON public.asset_transfers FOR DELETE
+  TO authenticated
+  USING (public.is_staff_or_admin() OR (requested_by = auth.uid() AND status = 'pending'));
 
 -- 4.8 borrow_requests
 CREATE POLICY "borrow_requests_select"
@@ -765,6 +771,14 @@ CREATE POLICY "borrow_requests_update"
     OR (requester_id = auth.uid() AND status IN ('pending', 'cancelled'))
   );
 
+CREATE POLICY "borrow_requests_delete"
+  ON public.borrow_requests FOR DELETE
+  TO authenticated
+  USING (
+    public.is_staff_or_admin()
+    OR (requester_id = auth.uid() AND status = 'pending')
+  );
+
 -- 4.9 borrow_transactions
 CREATE POLICY "borrow_transactions_select"
   ON public.borrow_transactions FOR SELECT
@@ -783,6 +797,11 @@ CREATE POLICY "borrow_transactions_insert_staff"
   TO authenticated
   WITH CHECK (public.is_staff_or_admin());
 
+CREATE POLICY "borrow_transactions_delete_staff"
+  ON public.borrow_transactions FOR DELETE
+  TO authenticated
+  USING (public.is_staff_or_admin());
+
 -- 4.10 maintenance_requests
 CREATE POLICY "maintenance_requests_select"
   ON public.maintenance_requests FOR SELECT
@@ -800,6 +819,11 @@ CREATE POLICY "maintenance_requests_update"
   USING (public.is_staff_or_admin() OR (reported_by = auth.uid() AND status = 'pending'))
   WITH CHECK (public.is_staff_or_admin() OR (reported_by = auth.uid() AND status IN ('pending', 'cancelled')));
 
+CREATE POLICY "maintenance_requests_delete"
+  ON public.maintenance_requests FOR DELETE
+  TO authenticated
+  USING (public.is_staff_or_admin() OR (reported_by = auth.uid() AND status = 'pending'));
+
 -- 4.11 maintenance_logs
 CREATE POLICY "maintenance_logs_select"
   ON public.maintenance_logs FOR SELECT
@@ -816,6 +840,11 @@ CREATE POLICY "maintenance_logs_insert_staff"
   ON public.maintenance_logs FOR INSERT
   TO authenticated
   WITH CHECK (public.is_staff_or_admin());
+
+CREATE POLICY "maintenance_logs_delete_staff"
+  ON public.maintenance_logs FOR DELETE
+  TO authenticated
+  USING (public.is_staff_or_admin());
 
 -- 4.12 inventory_sessions & inventory_items
 CREATE POLICY "inventory_sessions_select"
@@ -856,6 +885,11 @@ CREATE POLICY "disposal_requests_update_staff"
   TO authenticated
   USING (public.is_staff_or_admin())
   WITH CHECK (public.is_staff_or_admin());
+
+CREATE POLICY "disposal_requests_delete_staff"
+  ON public.disposal_requests FOR DELETE
+  TO authenticated
+  USING (public.is_staff_or_admin());
 
 -- 4.14 corporate_events
 CREATE POLICY "corporate_events_select"
@@ -922,7 +956,7 @@ CREATE POLICY "notifications_insert_authenticated"
   WITH CHECK (public.is_staff_or_admin() OR user_id = auth.uid());
 
 
--- >>> START OF supabase/migrations/00003_rpc_functions.sql <<<
+-- === supabase/migrations/00003_rpc_functions.sql ===
 -- =============================================================================
 -- Migration 00003: Database Functions & Atomic RPC Transactions
 -- รองรับการทำงานหลายตารางใน Transaction เดียวกัน พร้อมบันทึก Audit Log อัตโนมัติ
@@ -1338,7 +1372,7 @@ BEGIN
     UPDATE public.assets
     SET status = 'disposed', updated_by = auth.uid(), updated_at = NOW()
     WHERE id = v_disp.asset_id;
-  ELSIF p_new_status = 'rejected' THEN
+  ELSIF p_new_status IN ('rejected', 'draft') THEN
     UPDATE public.assets
     SET status = 'available', updated_by = auth.uid(), updated_at = NOW()
     WHERE id = v_disp.asset_id AND status = 'pending_disposal';
@@ -1470,8 +1504,57 @@ BEGIN
 END;
 $$;
 
+-- 7. RPC: ลบครุภัณฑ์พร้อมประวัติธุรกรรมที่เกี่ยวข้องโดย Admin หรือเจ้าหน้าที่พัสดุ
+CREATE OR REPLACE FUNCTION public.delete_asset_cascade(
+  p_asset_id UUID
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_asset RECORD;
+BEGIN
+  IF NOT public.is_staff_or_admin() THEN
+    RAISE EXCEPTION 'เฉพาะผู้ดูแลระบบหรือเจ้าหน้าที่พัสดุเท่านั้นที่มีสิทธิ์ลบรายการครุภัณฑ์';
+  END IF;
 
--- >>> START OF supabase/migrations/00004_storage_buckets.sql <<<
+  SELECT * INTO v_asset FROM public.assets WHERE id = p_asset_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ไม่พบข้อมูลครุภัณฑ์ที่ต้องการลบ';
+  END IF;
+
+  PERFORM public.write_audit_log(
+    'ASSET_DELETED',
+    'assets',
+    p_asset_id::TEXT,
+    format('ลบครุภัณฑ์ %s (%s) ออกจากระบบ', v_asset.asset_code, v_asset.name),
+    jsonb_build_object(
+      'asset_code', v_asset.asset_code,
+      'name', v_asset.name,
+      'unit_price', v_asset.unit_price,
+      'status', v_asset.status
+    ),
+    NULL
+  );
+
+  DELETE FROM public.borrow_transactions WHERE asset_id = p_asset_id;
+  DELETE FROM public.borrow_requests WHERE asset_id = p_asset_id;
+  DELETE FROM public.maintenance_logs WHERE asset_id = p_asset_id;
+  DELETE FROM public.maintenance_requests WHERE asset_id = p_asset_id;
+  DELETE FROM public.disposal_requests WHERE asset_id = p_asset_id;
+  DELETE FROM public.asset_transfers WHERE asset_id = p_asset_id;
+  DELETE FROM public.inventory_items WHERE asset_id = p_asset_id;
+  DELETE FROM public.asset_attachments WHERE asset_id = p_asset_id;
+  DELETE FROM public.assets WHERE id = p_asset_id;
+
+  RETURN jsonb_build_object('success', TRUE, 'deleted_asset_id', p_asset_id);
+END;
+$$;
+
+
+-- === supabase/migrations/00004_storage_buckets.sql ===
 -- =============================================================================
 -- Migration 00004: Supabase Storage Buckets และ Storage RLS Policies
 -- สร้าง 4 Buckets ตามข้อกำหนด พร้อมจำกัดประเภทไฟล์และขนาดสูงสุด
@@ -1609,7 +1692,7 @@ CREATE POLICY "disposal_attachments_delete_staff"
   USING (bucket_id = 'disposal-attachments' AND public.is_staff_or_admin());
 
 
--- >>> START OF supabase/seed.sql <<<
+-- === supabase/seed.sql ===
 -- =============================================================================
 -- ข้อมูลตัวอย่างสำหรับการพัฒนาและทดสอบ (Development Seed Data)
 -- คำเตือน: ใช้สำหรับสภาพแวดล้อมการพัฒนา (Development / Staging) เท่านั้น
@@ -1812,137 +1895,3 @@ INSERT INTO public.corporate_events (
     'มีคู่มืออิเล็กทรอนิกส์แจกในระบบ'
   )
 ON CONFLICT (id) DO NOTHING;
-
-
--- >>> START OF supabase/create_admin_user.sql <<<
--- =============================================================================
--- สคริปต์สร้างหรือรีเซ็ตบัญชีผู้ดูแลระบบ (Admin) อัตโนมัติสำหรับ Supabase SQL Editor
--- อีเมลเริ่มต้น: admin@agency.go.th
--- รหัสผ่านเริ่มต้น: Admin@123456
--- =============================================================================
-
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-
-DO $$
-DECLARE
-  v_email TEXT := 'admin@agency.go.th';
-  v_password TEXT := 'Admin@123456';
-  v_user_id UUID;
-BEGIN
-  -- ค้นหาว่ามีผู้ใช้นี้ใน auth.users แล้วหรือไม่
-  SELECT id INTO v_user_id
-  FROM auth.users
-  WHERE email = v_email
-  LIMIT 1;
-
-  IF v_user_id IS NULL THEN
-    -- กรณีที่ยังไม่มีผู้ใช้ใน auth.users ให้สร้างใหม่พร้อมยืนยันอีเมลทันที
-    v_user_id := gen_random_uuid();
-
-    INSERT INTO auth.users (
-      instance_id,
-      id,
-      aud,
-      role,
-      email,
-      encrypted_password,
-      email_confirmed_at,
-      raw_app_meta_data,
-      raw_user_meta_data,
-      created_at,
-      updated_at,
-      confirmation_token,
-      email_change,
-      email_change_token_new,
-      recovery_token
-    ) VALUES (
-      '00000000-0000-0000-0000-000000000000',
-      v_user_id,
-      'authenticated',
-      'authenticated',
-      v_email,
-      extensions.crypt(v_password, extensions.gen_salt('bf')),
-      NOW(),
-      '{"provider": "email", "providers": ["email"]}'::jsonb,
-      jsonb_build_object(
-        'sub', v_user_id::text,
-        'email', v_email,
-        'full_name', 'ผู้ดูแลระบบพัสดุกลาง',
-        'email_verified', true,
-        'phone_verified', false
-      ),
-      NOW(),
-      NOW(),
-      '',
-      '',
-      '',
-      ''
-    );
-  ELSE
-    -- กรณีที่มีผู้ใช้อยู่แล้ว ให้รีเซ็ตรหัสผ่านและยืนยันอีเมลให้พร้อมใช้งานทันที
-    UPDATE auth.users
-    SET encrypted_password = extensions.crypt(v_password, extensions.gen_salt('bf')),
-        email_confirmed_at = COALESCE(email_confirmed_at, NOW()),
-        raw_app_meta_data = '{"provider": "email", "providers": ["email"]}'::jsonb,
-        confirmation_token = COALESCE(confirmation_token, ''),
-        email_change = COALESCE(email_change, ''),
-        email_change_token_new = COALESCE(email_change_token_new, ''),
-        recovery_token = COALESCE(recovery_token, ''),
-        updated_at = NOW()
-    WHERE id = v_user_id;
-  END IF;
-
-  -- ตรวจสอบและสร้างข้อมูลใน auth.identities
-  IF NOT EXISTS (
-    SELECT 1 FROM auth.identities WHERE user_id = v_user_id AND provider = 'email'
-  ) THEN
-    INSERT INTO auth.identities (
-      id,
-      user_id,
-      provider_id,
-      identity_data,
-      provider,
-      last_sign_in_at,
-      created_at,
-      updated_at
-    ) VALUES (
-      gen_random_uuid(),
-      v_user_id,
-      v_user_id::text,
-      jsonb_build_object(
-        'sub', v_user_id::text,
-        'email', v_email,
-        'email_verified', true,
-        'phone_verified', false
-      ),
-      'email',
-      NOW(),
-      NOW(),
-      NOW()
-    );
-  END IF;
-
-  -- สร้างหรืออัปเดตโปรไฟล์ใน public.profiles ให้เป็นระดับ admin
-  INSERT INTO public.profiles (id, email, full_name, role, position, is_active)
-  VALUES (
-    v_user_id,
-    v_email,
-    'ผู้ดูแลระบบพัสดุกลาง',
-    'admin',
-    'นักวิชาการพัสดุชำนาญการ',
-    TRUE
-  )
-  ON CONFLICT (id) DO UPDATE
-  SET email = EXCLUDED.email,
-      full_name = EXCLUDED.full_name,
-      role = 'admin',
-      position = EXCLUDED.position,
-      is_active = TRUE,
-      updated_at = NOW();
-END $$;
-
--- ตรวจสอบผลลัพธ์หลังรัน
-SELECT id, email, role, full_name, is_active FROM public.profiles WHERE email = 'admin@agency.go.th';
-
-
-

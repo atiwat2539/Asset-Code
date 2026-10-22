@@ -13,6 +13,8 @@ import {
   AlertTriangle,
   Loader2,
   Search,
+  Edit3,
+  Trash2,
 } from 'lucide-react';
 import { assertSupabaseConfigured, isSupabaseConfigured, recordAuditLog, supabase } from '@/lib/supabase';
 import {
@@ -23,6 +25,7 @@ import { formatThaiDate, formatThaiDateTime, getDaysRemaining, toISODateInput } 
 import { useAuth } from '@/features/auth/AuthContext';
 import { useDepartments, useSystemSettings } from '@/hooks/useMasterData';
 import {
+  ConfirmDialog,
   EmptyState,
   ErrorState,
   LoadingState,
@@ -30,7 +33,7 @@ import {
   PageHeader,
   StatusBadge,
 } from '@/components/ui/common';
-import type { Asset, BorrowRequest } from '@/types/database';
+import type { Asset, BorrowRequest, BorrowStatus } from '@/types/database';
 
 const borrowSchema = z.object({
   asset_id: z.string().min(1, 'กรุณาเลือกครุภัณฑ์ที่ต้องการยืม'),
@@ -65,6 +68,19 @@ export function BorrowingPage() {
   const [actionNotes, setActionNotes] = useState('');
   const [returnCondition, setReturnCondition] = useState<'normal' | 'minor_damage' | 'damaged' | 'lost'>('normal');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // Edit & Delete Borrow Request state
+  const [editingBorrow, setEditingBorrow] = useState<BorrowRequest | null>(null);
+  const [deletingBorrow, setDeletingBorrow] = useState<BorrowRequest | null>(null);
+  const [editBorrowForm, setEditBorrowForm] = useState({
+    department_id: '',
+    purpose: '',
+    borrow_date: '',
+    expected_return_date: '',
+    status: 'pending' as BorrowStatus,
+    notes: '',
+  });
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const {
     data: requests = [],
@@ -213,6 +229,93 @@ export function BorrowingPage() {
       toast.error(translateSupabaseError(err));
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  const openEditBorrowModal = (req: BorrowRequest) => {
+    setEditingBorrow(req);
+    setEditBorrowForm({
+      department_id: req.department_id || '',
+      purpose: req.purpose,
+      borrow_date: req.borrow_date,
+      expected_return_date: req.expected_return_date,
+      status: req.status,
+      notes: req.notes || '',
+    });
+  };
+
+  const handleSaveEditBorrow = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBorrow || !editBorrowForm.purpose.trim()) {
+      toast.error('กรุณาระบุวัตถุประสงค์การยืม');
+      return;
+    }
+    setIsSavingEdit(true);
+    try {
+      assertSupabaseConfigured();
+      const { error: updErr } = await supabase
+        .from('borrow_requests')
+        .update({
+          department_id: editBorrowForm.department_id || null,
+          purpose: editBorrowForm.purpose.trim(),
+          borrow_date: editBorrowForm.borrow_date,
+          expected_return_date: editBorrowForm.expected_return_date,
+          status: editBorrowForm.status,
+          notes: editBorrowForm.notes.trim() || null,
+        })
+        .eq('id', editingBorrow.id);
+      if (updErr) throw updErr;
+
+      await recordAuditLog({
+        action: 'BORROW_REQUEST_UPDATED',
+        entityType: 'borrow_requests',
+        entityId: editingBorrow.id,
+        summary: `แก้ไขข้อมูลคำขอยืมครุภัณฑ์ เลขที่ ${editingBorrow.request_no}`,
+      });
+
+      toast.success('บันทึกการแก้ไขคำขอยืมเรียบร้อยแล้ว');
+      setEditingBorrow(null);
+      queryClient.invalidateQueries({ queryKey: ['borrow-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  const handleConfirmDeleteBorrow = async () => {
+    if (!deletingBorrow) return;
+    try {
+      assertSupabaseConfigured();
+      const { error: delErr } = await supabase
+        .from('borrow_requests')
+        .delete()
+        .eq('id', deletingBorrow.id);
+      if (delErr) throw delErr;
+
+      if (deletingBorrow.status === 'borrowed' || deletingBorrow.status === 'overdue') {
+        await supabase
+          .from('assets')
+          .update({ status: 'available' })
+          .eq('id', deletingBorrow.asset_id);
+      }
+
+      await recordAuditLog({
+        action: 'BORROW_REQUEST_DELETED',
+        entityType: 'borrow_requests',
+        entityId: deletingBorrow.id,
+        summary: `ลบคำขอยืมครุภัณฑ์ เลขที่ ${deletingBorrow.request_no}`,
+      });
+
+      toast.success(`ลบคำขอยืมเลขที่ ${deletingBorrow.request_no} เรียบร้อยแล้ว`);
+      setDeletingBorrow(null);
+      queryClient.invalidateQueries({ queryKey: ['borrow-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['available-assets-for-borrow'] });
+      queryClient.invalidateQueries({ queryKey: ['assets-list'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
+    } catch (err) {
+      toast.error(translateSupabaseError(err));
     }
   };
 
@@ -387,66 +490,89 @@ export function BorrowingPage() {
                         />
                       </td>
                       <td className="p-3.5 text-right whitespace-nowrap">
-                        {canApprove && (
-                          <div className="inline-flex items-center gap-1.5">
-                            {req.status === 'pending' && (
-                              <>
+                        <div className="inline-flex items-center gap-1.5">
+                          {canApprove && (
+                            <>
+                              {req.status === 'pending' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActionNotes('');
+                                      setActiveAction({ request: req, action: 'approve' });
+                                    }}
+                                    className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                                  >
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    อนุมัติ
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActionNotes('');
+                                      setActiveAction({ request: req, action: 'reject' });
+                                    }}
+                                    className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
+                                  >
+                                    <XCircle className="h-3.5 w-3.5" />
+                                    ปฏิเสธ
+                                  </button>
+                                </>
+                              )}
+
+                              {req.status === 'approved' && (
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setActionNotes('');
-                                    setActiveAction({ request: req, action: 'approve' });
+                                    setReturnCondition('normal');
+                                    setActiveAction({ request: req, action: 'checkout' });
                                   }}
-                                  className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
+                                  className="inline-flex items-center gap-1 rounded-lg bg-gov-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-gov-800"
                                 >
-                                  <CheckCircle2 className="h-3.5 w-3.5" />
-                                  อนุมัติ
+                                  <PackageCheck className="h-3.5 w-3.5" />
+                                  บันทึกจ่ายของ
                                 </button>
+                              )}
+
+                              {(req.status === 'borrowed' || req.status === 'overdue') && (
                                 <button
                                   type="button"
                                   onClick={() => {
                                     setActionNotes('');
-                                    setActiveAction({ request: req, action: 'reject' });
+                                    setReturnCondition('normal');
+                                    setActiveAction({ request: req, action: 'checkin' });
                                   }}
-                                  className="inline-flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
+                                  className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-700"
                                 >
-                                  <XCircle className="h-3.5 w-3.5" />
-                                  ปฏิเสธ
+                                  <RotateCcw className="h-3.5 w-3.5" />
+                                  บันทึกรับคืน
                                 </button>
-                              </>
-                            )}
+                              )}
+                            </>
+                          )}
 
-                            {req.status === 'approved' && (
+                          {(canApprove || req.requester_id === user?.id) && (
+                            <>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setActionNotes('');
-                                  setReturnCondition('normal');
-                                  setActiveAction({ request: req, action: 'checkout' });
-                                }}
-                                className="inline-flex items-center gap-1 rounded-lg bg-gov-700 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-gov-800"
+                                onClick={() => openEditBorrowModal(req)}
+                                className="rounded-lg border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-100"
+                                title="แก้ไขข้อมูลคำขอยืม"
                               >
-                                <PackageCheck className="h-3.5 w-3.5" />
-                                บันทึกจ่ายของ
+                                <Edit3 className="h-4 w-4" />
                               </button>
-                            )}
-
-                            {(req.status === 'borrowed' || req.status === 'overdue') && (
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setActionNotes('');
-                                  setReturnCondition('normal');
-                                  setActiveAction({ request: req, action: 'checkin' });
-                                }}
-                                className="inline-flex items-center gap-1 rounded-lg bg-sky-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-700"
+                                onClick={() => setDeletingBorrow(req)}
+                                className="rounded-lg border border-rose-200 p-1.5 text-rose-600 hover:bg-rose-50"
+                                title="ลบคำขอยืม"
                               >
-                                <RotateCcw className="h-3.5 w-3.5" />
-                                บันทึกรับคืน
+                                <Trash2 className="h-4 w-4" />
                               </button>
-                            )}
-                          </div>
-                        )}
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -645,6 +771,125 @@ export function BorrowingPage() {
           </div>
         )}
       </Modal>
+
+      {/* Modal แก้ไขคำขอยืม */}
+      <Modal
+        open={Boolean(editingBorrow)}
+        onClose={() => setEditingBorrow(null)}
+        title={`แก้ไขคำขอยืม: ${editingBorrow?.request_no || ''}`}
+      >
+        {editingBorrow && (
+          <form onSubmit={handleSaveEditBorrow} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">หน่วยงานผู้ขอยืม</label>
+              <select
+                value={editBorrowForm.department_id}
+                onChange={(e) => setEditBorrowForm({ ...editBorrowForm, department_id: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">-- เลือกหน่วยงาน --</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.code} - {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">
+                วัตถุประสงค์ในการยืม <span className="text-rose-600">*</span>
+              </label>
+              <textarea
+                rows={2}
+                value={editBorrowForm.purpose}
+                onChange={(e) => setEditBorrowForm({ ...editBorrowForm, purpose: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">วันที่รับครุภัณฑ์</label>
+                <input
+                  type="date"
+                  value={editBorrowForm.borrow_date}
+                  onChange={(e) => setEditBorrowForm({ ...editBorrowForm, borrow_date: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">วันกำหนดส่งคืน</label>
+                <input
+                  type="date"
+                  value={editBorrowForm.expected_return_date}
+                  onChange={(e) =>
+                    setEditBorrowForm({ ...editBorrowForm, expected_return_date: e.target.value })
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+              </div>
+            </div>
+
+            {canApprove && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-700">สถานะคำขอ</label>
+                <select
+                  value={editBorrowForm.status}
+                  onChange={(e) =>
+                    setEditBorrowForm({ ...editBorrowForm, status: e.target.value as BorrowStatus })
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold"
+                >
+                  {Object.entries(BORROW_STATUS_META).map(([k, m]) => (
+                    <option key={k} value={k}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700">หมายเหตุ</label>
+              <input
+                type="text"
+                value={editBorrowForm.notes}
+                onChange={(e) => setEditBorrowForm({ ...editBorrowForm, notes: e.target.value })}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+              <button
+                type="button"
+                onClick={() => setEditingBorrow(null)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingEdit}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gov-700 px-4 py-2 text-xs font-semibold text-white hover:bg-gov-800"
+              >
+                {isSavingEdit && <Loader2 className="h-4 w-4 animate-spin" />}
+                บันทึกการแก้ไข
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        open={Boolean(deletingBorrow)}
+        onClose={() => setDeletingBorrow(null)}
+        onConfirm={handleConfirmDeleteBorrow}
+        title="ยืนยันการลบคำขอยืมครุภัณฑ์"
+        description={`คุณต้องการลบคำขอยืมเลขที่ "${deletingBorrow?.request_no || ''}" (${deletingBorrow?.asset?.asset_code || ''}) ออกจากระบบใช่หรือไม่?`}
+        confirmLabel="ยืนยันลบคำขอยืม"
+      />
     </div>
   );
 }

@@ -580,22 +580,39 @@ export function CalendarPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
-            <button
-              type="button"
-              onClick={() => setIsModalOpen(false)}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700"
-            >
-              ยกเลิก
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="inline-flex items-center gap-2 rounded-lg bg-gov-700 px-4 py-2 text-xs font-semibold text-white hover:bg-gov-800"
-            >
-              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              บันทึกกิจกรรม
-            </button>
+          <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-200">
+            <div>
+              {editingEvent && canManage && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsModalOpen(false);
+                    setDeletingEvent(editingEvent);
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  ลบกิจกรรมนี้
+                </button>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-medium text-slate-700"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="inline-flex items-center gap-2 rounded-lg bg-gov-700 px-4 py-2 text-xs font-semibold text-white hover:bg-gov-800"
+              >
+                {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                บันทึกกิจกรรม
+              </button>
+            </div>
           </div>
         </form>
       </Modal>
