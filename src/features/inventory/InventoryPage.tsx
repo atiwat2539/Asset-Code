@@ -382,7 +382,7 @@ export function InventoryPage() {
     }
   };
 
-  const handleExportSessionReport = (format: 'xlsx' | 'pdf') => {
+  const handleExportSessionReport = async (format: 'xlsx' | 'pdf') => {
     if (!activeSession || sessionItems.length === 0) {
       toast.error('ยังไม่มีรายการผลตรวจนับในรอบนี้ให้ส่งออก');
       return;
@@ -427,8 +427,8 @@ export function InventoryPage() {
       exportToExcel(rows, cols, meta);
       toast.success('ส่งออกรายงานตรวจนับ Excel สำเร็จ');
     } else {
-      exportToPDF(rows, cols, meta);
-      toast.success('ส่งออกรายงานตรวจนับ PDF สำเร็จ');
+      await exportToPDF(rows, cols, meta);
+      toast.success('ส่งออกรายงานตรวจนับ PDF (ภาษาไทย) สำเร็จ');
     }
   };
 

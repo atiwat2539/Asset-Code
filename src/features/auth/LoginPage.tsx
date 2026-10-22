@@ -373,14 +373,18 @@ export function LoginPage() {
       <div className="flex flex-1 items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200">
           <div className="bg-gov-800 px-6 py-6 text-center text-white">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/25">
-              <Building2 className="h-8 w-8 text-sky-200" />
+            <div className="mx-auto inline-flex items-center justify-center rounded-2xl bg-white px-5 py-3 shadow-lg ring-2 ring-white/30 transition-transform duration-300 hover:scale-105">
+              <img
+                src="/cmu-library-logo.png"
+                alt="CMU Library Logo"
+                className="h-14 w-auto object-contain"
+              />
             </div>
             <h1 className="mt-3.5 text-xl font-bold tracking-tight">
               ระบบบริหารจัดการครุภัณฑ์สำนักงาน
             </h1>
             <p className="mt-1 text-xs text-sky-100/80">
-              Government Enterprise Asset Management System
+              CMU Library Asset Management System
             </p>
           </div>
 

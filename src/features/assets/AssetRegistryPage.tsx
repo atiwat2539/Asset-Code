@@ -23,6 +23,13 @@ import {
   AlertTriangle,
   Trash2,
   Archive,
+  LayoutGrid,
+  List,
+  Download,
+  Building2,
+  MapPin,
+  User,
+  Calendar,
 } from 'lucide-react';
 import { assertSupabaseConfigured, isSupabaseConfigured, recordAuditLog, supabase } from '@/lib/supabase';
 import {
@@ -31,7 +38,7 @@ import {
   translateSupabaseError,
 } from '@/lib/utils';
 import { formatThaiDate, toISODateInput } from '@/lib/date';
-import { exportToExcel, exportToPDF } from '@/lib/export';
+import { downloadAssetImportTemplate, exportToExcel, exportToPDF } from '@/lib/export';
 import { uploadFileToBucket } from '@/lib/storage';
 import { useAuth } from '@/features/auth/AuthContext';
 import { useCategories, useDepartments, useLocations, useProfiles, useSystemSettings } from '@/hooks/useMasterData';
@@ -84,6 +91,60 @@ interface ImportPreviewRow {
   department_id?: string;
 }
 
+const CARD_STATUS_THEME: Record<
+  AssetStatus,
+  {
+    cardBorder: string;
+    topBar: string;
+    headerBg: string;
+    iconBg: string;
+    priceColor: string;
+  }
+> = {
+  available: {
+    cardBorder: 'border-emerald-200/90 hover:border-emerald-400 hover:shadow-emerald-500/15',
+    topBar: 'from-emerald-500 via-teal-500 to-emerald-400',
+    headerBg: 'from-emerald-50/70 via-teal-50/30 to-white',
+    iconBg: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
+    priceColor: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+  },
+  borrowed: {
+    cardBorder: 'border-sky-200/90 hover:border-sky-400 hover:shadow-sky-500/15',
+    topBar: 'from-sky-500 via-blue-500 to-cyan-400',
+    headerBg: 'from-sky-50/70 via-blue-50/30 to-white',
+    iconBg: 'bg-sky-100 text-sky-700 ring-sky-200',
+    priceColor: 'text-sky-700 bg-sky-50 border-sky-200',
+  },
+  under_maintenance: {
+    cardBorder: 'border-amber-200/90 hover:border-amber-400 hover:shadow-amber-500/15',
+    topBar: 'from-amber-500 via-orange-500 to-yellow-400',
+    headerBg: 'from-amber-50/70 via-orange-50/30 to-white',
+    iconBg: 'bg-amber-100 text-amber-700 ring-amber-200',
+    priceColor: 'text-amber-800 bg-amber-50 border-amber-200',
+  },
+  pending_disposal: {
+    cardBorder: 'border-orange-200/90 hover:border-orange-400 hover:shadow-orange-500/15',
+    topBar: 'from-orange-500 via-amber-600 to-red-400',
+    headerBg: 'from-orange-50/70 via-amber-50/30 to-white',
+    iconBg: 'bg-orange-100 text-orange-700 ring-orange-200',
+    priceColor: 'text-orange-800 bg-orange-50 border-orange-200',
+  },
+  disposed: {
+    cardBorder: 'border-slate-300 hover:border-slate-400 hover:shadow-slate-500/15',
+    topBar: 'from-slate-500 via-slate-600 to-slate-400',
+    headerBg: 'from-slate-100/80 via-slate-50/40 to-white',
+    iconBg: 'bg-slate-200 text-slate-600 ring-slate-300',
+    priceColor: 'text-slate-700 bg-slate-100 border-slate-300',
+  },
+  lost: {
+    cardBorder: 'border-rose-200/90 hover:border-rose-400 hover:shadow-rose-500/15',
+    topBar: 'from-rose-500 via-red-500 to-pink-500',
+    headerBg: 'from-rose-50/70 via-pink-50/30 to-white',
+    iconBg: 'bg-rose-100 text-rose-700 ring-rose-200',
+    priceColor: 'text-rose-700 bg-rose-50 border-rose-200',
+  },
+};
+
 export function AssetRegistryPage() {
   const { user, hasRole } = useAuth();
   const canEdit = hasRole(['admin', 'asset_officer']);
@@ -108,7 +169,8 @@ export function AssetRegistryPage() {
   const [sortField, setSortField] = useState<'asset_code' | 'name' | 'unit_price' | 'acquired_date'>('asset_code');
   const [sortAsc, setSortAsc] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(12);
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
 
   // Modal states
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -499,7 +561,7 @@ export function AssetRegistryPage() {
   };
 
   // Export เฉพาะรายการที่กรองอยู่ตามสิทธิ์
-  const handleExport = (format: 'xlsx' | 'pdf') => {
+  const handleExport = async (format: 'xlsx' | 'pdf') => {
     if (filteredAssets.length === 0) {
       toast.error('ไม่มีรายการครุภัณฑ์ให้ส่งออก');
       return;
@@ -546,8 +608,8 @@ export function AssetRegistryPage() {
       exportToExcel(rows, cols, meta);
       toast.success('ส่งออกไฟล์ Excel (.xlsx) สำเร็จ');
     } else {
-      exportToPDF(rows, cols, meta);
-      toast.success('ส่งออกไฟล์ PDF สำเร็จ');
+      await exportToPDF(rows, cols, meta);
+      toast.success('ส่งออกไฟล์ PDF ภาษาไทยสำเร็จ');
     }
   };
 
@@ -685,6 +747,34 @@ export function AssetRegistryPage() {
         subtitle="ค้นหา ตรวจสอบ เพิ่ม/แก้ไข นำเข้า และส่งออกข้อมูลครุภัณฑ์ของหน่วยงาน"
         actions={
           <>
+            <div className="inline-flex rounded-lg border border-slate-300 bg-white p-0.5 text-xs shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-semibold transition ${
+                  viewMode === 'table'
+                    ? 'bg-gov-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="มุมมองตาราง"
+              >
+                <List className="h-3.5 w-3.5" />
+                ตาราง
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('card')}
+                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 font-semibold transition ${
+                  viewMode === 'card'
+                    ? 'bg-gov-700 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="มุมมองการ์ดแยกสีตามสถานะ"
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                การ์ด
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => handleExport('xlsx')}
@@ -703,6 +793,18 @@ export function AssetRegistryPage() {
             </button>
             {canEdit && (
               <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadAssetImportTemplate('xlsx');
+                    toast.success('ดาวน์โหลดไฟล์ตัวอย่างสำหรับนำเข้าครุภัณฑ์ (.xlsx) สำเร็จ');
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+                  title="ดาวน์โหลดไฟล์ Excel ตัวอย่างสำหรับกรอกข้อมูลนำเข้า"
+                >
+                  <Download className="h-4 w-4 text-emerald-700" />
+                  ไฟล์ตัวอย่างนำเข้า
+                </button>
                 <button
                   type="button"
                   onClick={() => {
@@ -870,6 +972,190 @@ export function AssetRegistryPage() {
             )
           }
         />
+      ) : viewMode === 'card' ? (
+        <div className="space-y-4">
+          {/* แถบสรุปสถานะสีของการ์ด */}
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs shadow-2xs">
+            <span className="font-semibold text-slate-600 mr-1">แถบสีสถานะการ์ด:</span>
+            {Object.entries(ASSET_STATUS_META).map(([key, meta]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setStatusFilter((prev) => (prev === key ? '' : key));
+                  setCurrentPage(1);
+                }}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 font-medium transition ${
+                  meta.badgeClass
+                } ${statusFilter === key ? 'ring-2 ring-gov-600 scale-105' : 'opacity-90 hover:opacity-100'}`}
+              >
+                <span className={`h-2 w-2 rounded-full ${meta.dotClass}`} />
+                {meta.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {paginatedAssets.map((asset) => {
+              const statusMeta = ASSET_STATUS_META[asset.status];
+              const theme = CARD_STATUS_THEME[asset.status] || CARD_STATUS_THEME.available;
+              return (
+                <div
+                  key={asset.id}
+                  className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border bg-white shadow-xs transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl ${theme.cardBorder}`}
+                >
+                  {/* แถบสีด้านบนตามสถานะ */}
+                  <div className={`h-2 w-full bg-gradient-to-r ${theme.topBar}`} />
+
+                  <div>
+                    {/* ส่วนหัวการ์ดพร้อมรูปภาพและสถานะ */}
+                    <div className={`bg-gradient-to-b ${theme.headerBg} p-4 pb-3 border-b border-slate-100`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="inline-flex items-center rounded-md bg-white/90 px-2 py-0.5 font-mono text-xs font-bold text-gov-800 ring-1 ring-slate-200/80 shadow-2xs">
+                          {asset.asset_code}
+                        </span>
+                        <StatusBadge
+                          label={statusMeta?.label || asset.status}
+                          className={statusMeta?.badgeClass}
+                          dotClass={statusMeta?.dotClass}
+                        />
+                      </div>
+
+                      <div className="mt-3 flex items-center gap-3.5">
+                        {asset.image_url ? (
+                          <img
+                            src={asset.image_url}
+                            alt={asset.name}
+                            className="h-16 w-16 shrink-0 rounded-xl object-cover border border-slate-200 shadow-xs transition-transform duration-300 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div
+                            className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-xl ring-1 transition-transform duration-300 group-hover:scale-105 ${theme.iconBg}`}
+                          >
+                            <ImageIcon className="h-7 w-7" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <Link
+                            to={`/assets/${asset.id}`}
+                            className="line-clamp-2 text-sm font-bold text-slate-900 hover:text-gov-700 hover:underline leading-snug"
+                          >
+                            {asset.name}
+                          </Link>
+                          <p className="mt-1 truncate text-xs text-slate-500">
+                            {[asset.brand, asset.model].filter(Boolean).join(' • ') ||
+                              asset.category?.name ||
+                              'ไม่ระบุยี่ห้อ/รุ่น'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* รายละเอียดภายในตัวการ์ด */}
+                    <div className="p-4 space-y-2 text-xs text-slate-600">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-400">หมวดหมู่:</span>
+                        <span className="font-semibold text-slate-800 truncate">
+                          {asset.category?.name || '-'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-slate-600">
+                        <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        <span className="truncate font-medium text-slate-800">
+                          {asset.department?.name || 'ไม่ระบุหน่วยงาน'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-slate-600">
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        <span className="truncate">
+                          {asset.location
+                            ? `${asset.location.building} ห้อง ${asset.location.room || '-'}`
+                            : 'ไม่ระบุสถานที่ตั้ง'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-slate-600">
+                        <User className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                        <span className="truncate">
+                          ผู้ดูแล: {asset.custodian?.full_name || 'ไม่ระบุ'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                        <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                          <Calendar className="h-3 w-3" />
+                          {formatThaiDate(asset.acquired_date)}
+                        </span>
+                        <span
+                          className={`rounded-lg border px-2 py-0.5 text-xs font-bold ${theme.priceColor}`}
+                        >
+                          {formatCurrency(asset.unit_price)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ปุ่มจัดการท้ายการ์ด */}
+                  <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-4 py-2.5">
+                    <Link
+                      to={`/assets/${asset.id}`}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-gov-700 hover:text-gov-900 hover:underline"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      ดูรายละเอียด
+                    </Link>
+
+                    <div className="inline-flex items-center gap-1">
+                      <Link
+                        to={`/qr-barcode?assetId=${asset.id}`}
+                        className="rounded-lg p-1.5 text-slate-600 hover:bg-white hover:text-gov-700 hover:shadow-2xs"
+                        title="พิมพ์ฉลาก QR / Barcode"
+                      >
+                        <QrCode className="h-4 w-4" />
+                      </Link>
+                      {canEdit && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(asset)}
+                            className="rounded-lg p-1.5 text-slate-600 hover:bg-white hover:text-gov-700 hover:shadow-2xs"
+                            title="แก้ไขข้อมูลครุภัณฑ์"
+                          >
+                            <Edit3 className="h-4 w-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeletingAsset(asset)}
+                            className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
+                            title="ลบครุภัณฑ์"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={filteredAssets.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
+        </div>
       ) : (
         <div className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
           <div className="overflow-x-auto">
@@ -1318,11 +1604,37 @@ export function AssetRegistryPage() {
         maxWidth="max-w-4xl"
       >
         <div className="space-y-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700 space-y-2">
-            <p className="font-semibold text-slate-900">
-              คอลัมน์ที่รองรับในแถวหัวตาราง (Header Row):
-            </p>
-            <p className="font-mono text-[11px] bg-white p-2 rounded border border-slate-200">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-700 space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <p className="font-semibold text-slate-900">
+                คอลัมน์ที่รองรับในแถวหัวตาราง (Header Row):
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadAssetImportTemplate('xlsx');
+                    toast.success('ดาวน์โหลดไฟล์ตัวอย่าง .xlsx เรียบร้อยแล้ว');
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 shadow-2xs"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  ดาวน์โหลดตัวอย่าง Excel (.xlsx)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    downloadAssetImportTemplate('csv');
+                    toast.success('ดาวน์โหลดไฟล์ตัวอย่าง .csv เรียบร้อยแล้ว');
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  ดาวน์โหลดตัวอย่าง CSV (.csv)
+                </button>
+              </div>
+            </div>
+            <p className="font-mono text-[11px] bg-white p-2.5 rounded-lg border border-slate-200">
               asset_code (หรือ เลขครุภัณฑ์), name (หรือ ชื่อครุภัณฑ์), category_code (เช่น 7440), department_code (เช่น ITD), brand, model, serial_number, unit_price, acquired_date (YYYY-MM-DD), contract_number
             </p>
             <input

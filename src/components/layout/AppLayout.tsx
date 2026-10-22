@@ -169,20 +169,11 @@ export function AppLayout() {
           {/* Brand Header */}
           <div className="flex h-16 items-center justify-between border-b border-white/10 px-4 bg-gov-800/80">
             <div className="flex items-center gap-3 overflow-hidden">
-              {settings?.logo_url ? (
-                <img
-                  src={settings.logo_url}
-                  alt="โลโก้หน่วยงาน"
-                  className="h-9 w-9 shrink-0 rounded-lg object-contain bg-white p-0.5"
-                />
-              ) : (
-                <div
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-500/20 border border-sky-400/30 text-sky-200"
-                  title="พื้นที่โลโก้หน่วยงาน (เปลี่ยนได้ในเมนูตั้งค่าระบบ)"
-                >
-                  <Building2 className="h-5 w-5" />
-                </div>
-              )}
+              <img
+                src={settings?.logo_url || '/cmu-library-logo.png'}
+                alt="โลโก้หน่วยงาน"
+                className="h-9 w-auto max-w-[110px] shrink-0 rounded-lg object-contain bg-white px-1.5 py-1 shadow-xs"
+              />
               {!collapsed && (
                 <div className="truncate">
                   <p className="truncate text-sm font-bold text-white leading-tight">{orgShort}</p>

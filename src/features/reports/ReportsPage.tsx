@@ -374,7 +374,7 @@ export function ReportsPage() {
 
   const currentReportMeta = REPORT_TYPES.find((r) => r.key === selectedReport)!;
 
-  const handleExport = (format: 'xlsx' | 'pdf') => {
+  const handleExport = async (format: 'xlsx' | 'pdf') => {
     if (reportTable.rows.length === 0) {
       toast.error('ไม่มีข้อมูลในรายงานนี้สำหรับส่งออก');
       return;
@@ -391,8 +391,8 @@ export function ReportsPage() {
       exportToExcel(reportTable.rows, reportTable.columns, meta);
       toast.success('ส่งออกรายงาน Excel (.xlsx) สำเร็จ');
     } else {
-      exportToPDF(reportTable.rows, reportTable.columns, meta);
-      toast.success('ส่งออกรายงาน PDF สำเร็จ');
+      await exportToPDF(reportTable.rows, reportTable.columns, meta);
+      toast.success('ส่งออกรายงาน PDF (ภาษาไทย) สำเร็จ');
     }
   };
 

@@ -104,14 +104,19 @@ export function Modal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-xs">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-900/60 p-4 backdrop-blur-xs animate-modal-backdrop"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div
         className={cn(
-          'relative w-full rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden my-8',
+          'relative w-full rounded-2xl bg-white shadow-2xl border border-slate-200/90 overflow-hidden my-8 animate-modal-float ring-1 ring-slate-900/5',
           maxWidth
         )}
       >
-        <div className="flex items-start justify-between border-b border-slate-200 bg-slate-50/80 px-6 py-4">
+        <div className="flex items-start justify-between border-b border-slate-200 bg-gradient-to-r from-slate-50 via-white to-gov-50/40 px-6 py-4">
           <div>
             <h2 className="text-lg font-bold text-slate-900">{title}</h2>
             {description && <p className="mt-0.5 text-xs text-slate-500">{description}</p>}
@@ -119,7 +124,7 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-600"
+            className="rounded-lg p-1.5 text-slate-400 transition-all hover:rotate-90 hover:bg-rose-50 hover:text-rose-600"
             aria-label="ปิดหน้าต่าง"
           >
             <X className="h-5 w-5" />
