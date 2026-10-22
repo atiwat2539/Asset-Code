@@ -21,7 +21,6 @@ import {
   Menu,
   X,
   UserCircle2,
-  Clock,
 } from 'lucide-react';
 import { cn, ROLE_LABELS } from '@/lib/utils';
 import { formatThaiDate, formatThaiDateNumeric, formatThaiDateTime } from '@/lib/date';
@@ -120,7 +119,7 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export function AppLayout() {
-  const { profile, user, role, remainingSessionSeconds, signOut } = useAuth();
+  const { profile, user, role, signOut } = useAuth();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -170,10 +169,6 @@ export function AppLayout() {
       document.removeEventListener('change', syncAllDateInputs, true);
     };
   }, []);
-
-  const sessionMinutes = String(Math.floor(remainingSessionSeconds / 60)).padStart(2, '0');
-  const sessionSeconds = String(remainingSessionSeconds % 60).padStart(2, '0');
-  const isSessionLow = remainingSessionSeconds <= 120;
 
   const { data: settings } = useQuery({
     queryKey: ['system-settings'],
@@ -323,21 +318,6 @@ export function AppLayout() {
             </div>
 
             <div className="flex items-center gap-3">
-              {user && (
-                <div
-                  className={cn(
-                    'hidden md:inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors',
-                    isSessionLow
-                      ? 'border-rose-300 bg-rose-50 text-rose-700 animate-pulse'
-                      : 'border-gov-200 bg-gov-50 text-gov-700'
-                  )}
-                  title="ตัดเซสชันอัตโนมัติหากไม่มีการใช้งานเกิน 15 นาที"
-                >
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>เซสชัน {sessionMinutes}:{sessionSeconds}</span>
-                </div>
-              )}
-
               <div className="hidden text-right sm:block">
                 <p className="text-xs font-semibold text-slate-800">
                   {profile?.full_name || user?.email || 'โหมดตรวจสอบระบบ'}
