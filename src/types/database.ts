@@ -124,7 +124,7 @@ export interface Asset {
   serial_number: string | null;
   description: string | null;
   unit_price: number;
-  acquired_date: string;
+  acquired_date: string | null;
   contract_number: string | null;
   useful_life_years: number | null;
   status: AssetStatus;

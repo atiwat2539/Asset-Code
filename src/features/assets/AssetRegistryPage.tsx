@@ -37,7 +37,7 @@ import {
   formatCurrency,
   translateSupabaseError,
 } from '@/lib/utils';
-import { formatThaiDate, toISODateInput } from '@/lib/date';
+import { formatThaiDate } from '@/lib/date';
 import { downloadAssetImportTemplate, exportToExcel, exportToPDF } from '@/lib/export';
 import { uploadFileToBucket } from '@/lib/storage';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -62,7 +62,7 @@ const assetFormSchema = z.object({
   serial_number: z.string().optional(),
   description: z.string().optional(),
   unit_price: z.coerce.number().min(0, 'ราคาต่อหน่วยต้องไม่ติดลบ'),
-  acquired_date: z.string().min(1, 'กรุณาระบุวันที่รับเข้า/ตรวจรับ'),
+  acquired_date: z.string().optional(),
   contract_number: z.string().optional(),
   useful_life_years: z.coerce.number().min(1).max(50).optional(),
   status: z.enum(['available', 'borrowed', 'under_maintenance', 'pending_disposal', 'disposed', 'lost']),
@@ -79,16 +79,24 @@ interface ImportPreviewRow {
   asset_code: string;
   name: string;
   category_code: string;
-  department_code: string;
+  status: AssetStatus;
   brand: string;
   model: string;
   serial_number: string;
   unit_price: number;
   acquired_date: string;
   contract_number: string;
+  department_code: string;
+  location_code: string;
+  custodian_name: string;
+  useful_life_years: number;
+  description: string;
+  notes: string;
   errors: string[];
   category_id?: string;
   department_id?: string;
+  location_id?: string;
+  custodian_id?: string;
 }
 
 const CARD_STATUS_THEME: Record<
@@ -222,7 +230,7 @@ export function AssetRegistryPage() {
       serial_number: '',
       description: '',
       unit_price: 0,
-      acquired_date: toISODateInput(),
+      acquired_date: '',
       contract_number: '',
       useful_life_years: 5,
       status: 'available',
@@ -246,7 +254,7 @@ export function AssetRegistryPage() {
       serial_number: '',
       description: '',
       unit_price: 0,
-      acquired_date: toISODateInput(),
+      acquired_date: '',
       contract_number: '',
       useful_life_years: 5,
       status: 'available',
@@ -271,7 +279,7 @@ export function AssetRegistryPage() {
       serial_number: asset.serial_number || '',
       description: asset.description || '',
       unit_price: Number(asset.unit_price),
-      acquired_date: asset.acquired_date,
+      acquired_date: asset.acquired_date || '',
       contract_number: asset.contract_number || '',
       useful_life_years: asset.useful_life_years || 5,
       status: asset.status,
@@ -322,7 +330,7 @@ export function AssetRegistryPage() {
         serial_number: values.serial_number?.trim() || null,
         description: values.description?.trim() || null,
         unit_price: Number(values.unit_price),
-        acquired_date: values.acquired_date,
+        acquired_date: values.acquired_date?.trim() || null,
         contract_number: values.contract_number?.trim() || null,
         useful_life_years: values.useful_life_years || 5,
         status: values.status,
@@ -504,8 +512,8 @@ export function AssetRegistryPage() {
         if (statusFilter && a.status !== statusFilter) return false;
         if (deptFilter && a.department_id !== deptFilter) return false;
         if (locationFilter && a.location_id !== locationFilter) return false;
-        if (dateFrom && a.acquired_date < dateFrom) return false;
-        if (dateTo && a.acquired_date > dateTo) return false;
+        if (dateFrom && (!a.acquired_date || a.acquired_date < dateFrom)) return false;
+        if (dateTo && (!a.acquired_date || a.acquired_date > dateTo)) return false;
         return true;
       })
       .sort((a, b) => {
@@ -513,7 +521,7 @@ export function AssetRegistryPage() {
         if (sortField === 'unit_price') {
           cmp = Number(a.unit_price) - Number(b.unit_price);
         } else if (sortField === 'acquired_date') {
-          cmp = a.acquired_date.localeCompare(b.acquired_date);
+          cmp = (a.acquired_date || '').localeCompare(b.acquired_date || '');
         } else if (sortField === 'name') {
           cmp = a.name.localeCompare(b.name, 'th');
         } else {
@@ -560,55 +568,97 @@ export function AssetRegistryPage() {
     setCurrentPage(1);
   };
 
-  // Export เฉพาะรายการที่กรองอยู่ตามสิทธิ์
+  // Export เฉพาะรายการที่กรองอยู่ตามสิทธิ์ (ส่งออกครบทุกฟิลด์ตามรายละเอียดครุภัณฑ์)
   const handleExport = async (format: 'xlsx' | 'pdf') => {
     if (filteredAssets.length === 0) {
       toast.error('ไม่มีรายการครุภัณฑ์ให้ส่งออก');
       return;
     }
 
-    const rows = filteredAssets.map((a, idx) => ({
-      seq: idx + 1,
-      asset_code: a.asset_code,
-      name: a.name,
-      category: a.category?.name || '-',
-      brand_model: [a.brand, a.model].filter(Boolean).join(' ') || '-',
-      serial_number: a.serial_number || '-',
-      department: a.department?.name || '-',
-      location: a.location ? `${a.location.building} ${a.location.room || ''}`.trim() : '-',
-      custodian: a.custodian?.full_name || '-',
-      acquired_date: formatThaiDate(a.acquired_date),
-      unit_price: Number(a.unit_price),
-      status: ASSET_STATUS_META[a.status]?.label || a.status,
-    }));
-
-    const cols: { key: keyof (typeof rows)[0]; header: string }[] = [
-      { key: 'seq', header: 'ลำดับ' },
-      { key: 'asset_code', header: 'เลขครุภัณฑ์' },
-      { key: 'name', header: 'ชื่อครุภัณฑ์' },
-      { key: 'category', header: 'หมวดหมู่' },
-      { key: 'brand_model', header: 'ยี่ห้อ/รุ่น' },
-      { key: 'serial_number', header: 'Serial No.' },
-      { key: 'department', header: 'หน่วยงาน' },
-      { key: 'location', header: 'สถานที่ตั้ง' },
-      { key: 'custodian', header: 'ผู้รับผิดชอบ' },
-      { key: 'acquired_date', header: 'วันที่รับเข้า' },
-      { key: 'unit_price', header: 'ราคาต่อหน่วย (บาท)' },
-      { key: 'status', header: 'สถานะ' },
-    ];
-
     const meta = {
       reportTitle: 'รายงานทะเบียนครุภัณฑ์สำนักงาน (Asset Registry Report)',
-      orgName: settings?.org_name,
+      orgName: settings?.org_name || 'สำนักหอสมุด มหาวิทยาลัยเชียงใหม่',
       filtersSummary: `คำค้น: ${searchTerm || 'ทั้งหมด'} | จำนวน ${filteredAssets.length} รายการ`,
       fileNamePrefix: 'asset_registry',
     };
 
     if (format === 'xlsx') {
-      exportToExcel(rows, cols, meta);
-      toast.success('ส่งออกไฟล์ Excel (.xlsx) สำเร็จ');
+      const excelRows = filteredAssets.map((a, idx) => ({
+        seq: idx + 1,
+        asset_code: a.asset_code,
+        name: a.name,
+        category: a.category ? `${a.category.code} - ${a.category.name}` : '-',
+        status: ASSET_STATUS_META[a.status]?.label || a.status,
+        brand: a.brand || '-',
+        model: a.model || '-',
+        serial_number: a.serial_number || '-',
+        unit_price: Number(a.unit_price || 0),
+        acquired_date: a.acquired_date ? formatThaiDate(a.acquired_date) : '-',
+        contract_number: a.contract_number || '-',
+        department: a.department ? `${a.department.code} - ${a.department.name}` : '-',
+        location: a.location
+          ? `${a.location.building} ชั้น ${a.location.floor || '-'} ห้อง ${a.location.room || '-'} (${a.location.name})`
+          : '-',
+        custodian: a.custodian ? `${a.custodian.full_name} (${a.custodian.email})` : '-',
+        useful_life_years: a.useful_life_years ? `${a.useful_life_years} ปี` : '-',
+        description: a.description || '-',
+        notes: a.notes || '-',
+      }));
+
+      const excelCols: { key: keyof (typeof excelRows)[0]; header: string }[] = [
+        { key: 'seq', header: 'ลำดับ' },
+        { key: 'asset_code', header: 'เลขครุภัณฑ์' },
+        { key: 'name', header: 'ชื่อครุภัณฑ์' },
+        { key: 'category', header: 'หมวดหมู่ครุภัณฑ์' },
+        { key: 'status', header: 'สถานะครุภัณฑ์' },
+        { key: 'brand', header: 'ยี่ห้อ (Brand)' },
+        { key: 'model', header: 'รุ่น (Model)' },
+        { key: 'serial_number', header: 'หมายเลขเครื่อง (Serial Number)' },
+        { key: 'unit_price', header: 'ราคาต่อหน่วย (บาท)' },
+        { key: 'acquired_date', header: 'วันที่รับเข้า / วันที่ตรวจรับ' },
+        { key: 'contract_number', header: 'เลขที่สัญญาจัดซื้อ / ใบตรวจรับ' },
+        { key: 'department', header: 'หน่วยงาน/กองผู้ครอบครอง' },
+        { key: 'location', header: 'อาคาร / ห้อง / สถานที่ตั้ง' },
+        { key: 'custodian', header: 'ผู้รับผิดชอบดูแลครุภัณฑ์' },
+        { key: 'useful_life_years', header: 'อายุการใช้งานโดยประมาณ (ปี)' },
+        { key: 'description', header: 'คุณลักษณะเฉพาะ / รายละเอียด' },
+        { key: 'notes', header: 'หมายเหตุ' },
+      ];
+
+      exportToExcel(excelRows, excelCols, meta);
+      toast.success('ส่งออกไฟล์ Excel (.xlsx) ตามฟิลด์รายละเอียดครุภัณฑ์สำเร็จ');
     } else {
-      await exportToPDF(rows, cols, meta);
+      const pdfRows = filteredAssets.map((a, idx) => ({
+        seq: idx + 1,
+        asset_code: a.asset_code,
+        name: a.name,
+        category: a.category?.name || '-',
+        brand_model: [a.brand, a.model].filter(Boolean).join(' ') || '-',
+        serial_number: a.serial_number || '-',
+        department: a.department?.name || '-',
+        location: a.location ? `${a.location.building} ${a.location.room || ''}`.trim() : '-',
+        custodian: a.custodian?.full_name || '-',
+        acquired_date: formatThaiDate(a.acquired_date),
+        unit_price: Number(a.unit_price),
+        status: ASSET_STATUS_META[a.status]?.label || a.status,
+      }));
+
+      const pdfCols: { key: keyof (typeof pdfRows)[0]; header: string }[] = [
+        { key: 'seq', header: 'ลำดับ' },
+        { key: 'asset_code', header: 'เลขครุภัณฑ์' },
+        { key: 'name', header: 'ชื่อครุภัณฑ์' },
+        { key: 'category', header: 'หมวดหมู่' },
+        { key: 'brand_model', header: 'ยี่ห้อ/รุ่น' },
+        { key: 'serial_number', header: 'Serial No.' },
+        { key: 'department', header: 'หน่วยงาน' },
+        { key: 'location', header: 'สถานที่ตั้ง' },
+        { key: 'custodian', header: 'ผู้รับผิดชอบ' },
+        { key: 'acquired_date', header: 'วันที่รับเข้า' },
+        { key: 'unit_price', header: 'ราคาต่อหน่วย (บาท)' },
+        { key: 'status', header: 'สถานะ' },
+      ];
+
+      await exportToPDF(pdfRows, pdfCols, meta);
       toast.success('ส่งออกไฟล์ PDF ภาษาไทยสำเร็จ');
     }
   };
@@ -628,18 +678,73 @@ export function AssetRegistryPage() {
       const existingCodes = new Set(assets.map((a) => a.asset_code.toLowerCase()));
       const seenInFile = new Set<string>();
 
+      const statusLabelMap: Record<string, AssetStatus> = {
+        available: 'available',
+        พร้อมใช้งาน: 'available',
+        ใช้งานปกติ: 'available',
+        active: 'available',
+        borrowed: 'borrowed',
+        กำลังถูกยืม: 'borrowed',
+        ถูกยืม: 'borrowed',
+        under_maintenance: 'under_maintenance',
+        อยู่ระหว่างซ่อมบำรุง: 'under_maintenance',
+        อยู่ระหว่างซ่อม: 'under_maintenance',
+        pending_disposal: 'pending_disposal',
+        รอพิจารณาจำหน่าย: 'pending_disposal',
+        รอจำหน่าย: 'pending_disposal',
+        disposed: 'disposed',
+        แทงจำหน่ายแล้ว: 'disposed',
+        จำหน่ายแล้ว: 'disposed',
+        lost: 'lost',
+        'สูญหาย/รอตรวจสอบ': 'lost',
+        สูญหาย: 'lost',
+      };
+
       const parsed: ImportPreviewRow[] = rawJson.map((row, index) => {
         const rowErrors: string[] = [];
-        const asset_code = String(row['asset_code'] || row['เลขครุภัณฑ์'] || '').trim();
-        const name = String(row['name'] || row['ชื่อครุภัณฑ์'] || '').trim();
-        const category_code = String(row['category_code'] || row['รหัสหมวดหมู่'] || '').trim();
-        const department_code = String(row['department_code'] || row['รหัสหน่วยงาน'] || '').trim();
-        const brand = String(row['brand'] || row['ยี่ห้อ'] || '').trim();
-        const model = String(row['model'] || row['รุ่น'] || '').trim();
-        const serial_number = String(row['serial_number'] || row['Serial'] || '').trim();
-        const unit_price = Number(row['unit_price'] || row['ราคาต่อหน่วย'] || 0);
-        const acquired_date = String(row['acquired_date'] || row['วันที่รับเข้า'] || toISODateInput()).trim();
-        const contract_number = String(row['contract_number'] || row['เลขที่สัญญา'] || '').trim();
+        const asset_code = String(
+          row['เลขครุภัณฑ์'] || row['เลขครุภัณฑ์ (Asset Code)'] || row['asset_code'] || ''
+        ).trim();
+        const name = String(row['ชื่อครุภัณฑ์'] || row['name'] || '').trim();
+        const category_code = String(
+          row['หมวดหมู่ครุภัณฑ์'] || row['รหัสหมวดหมู่'] || row['หมวดหมู่'] || row['category_code'] || ''
+        ).trim();
+        const statusRaw = String(
+          row['สถานะครุภัณฑ์'] || row['สถานะ'] || row['status'] || 'พร้อมใช้งาน'
+        ).trim();
+        const status: AssetStatus = statusLabelMap[statusRaw] || statusLabelMap[statusRaw.toLowerCase()] || 'available';
+        const brand = String(row['ยี่ห้อ (Brand)'] || row['ยี่ห้อ'] || row['brand'] || '').trim();
+        const model = String(row['รุ่น (Model)'] || row['รุ่น'] || row['model'] || '').trim();
+        const serial_number = String(
+          row['หมายเลขเครื่อง (Serial Number)'] || row['หมายเลขเครื่อง'] || row['Serial'] || row['serial_number'] || ''
+        ).trim();
+        const unit_price = Number(
+          row['ราคาต่อหน่วย (บาท)'] || row['ราคาต่อหน่วย'] || row['ราคาทุน'] || row['unit_price'] || 0
+        );
+        const acquired_date = String(
+          row['วันที่รับเข้า / วันที่ตรวจรับ'] || row['วันที่รับเข้า'] || row['วันที่ได้มา'] || row['acquired_date'] || ''
+        ).trim();
+        const contract_number = String(
+          row['เลขที่สัญญาจัดซื้อ / ใบตรวจรับ'] || row['เลขที่สัญญา'] || row['contract_number'] || ''
+        ).trim();
+        const department_code = String(
+          row['หน่วยงาน/กองผู้ครอบครอง'] || row['รหัสหน่วยงาน'] || row['หน่วยงาน'] || row['department_code'] || ''
+        ).trim();
+        const location_code = String(
+          row['อาคาร / ห้อง / สถานที่ตั้ง'] || row['รหัสสถานที่'] || row['สถานที่ตั้ง'] || row['location_code'] || ''
+        ).trim();
+        const custodian_name = String(
+          row['ผู้รับผิดชอบดูแลครุภัณฑ์'] || row['ผู้รับผิดชอบ'] || row['custodian'] || ''
+        ).trim();
+        const usefulLifeRaw = Number(
+          row['อายุการใช้งานโดยประมาณ (ปี)'] || row['อายุการใช้งาน (ปี)'] || row['useful_life_years'] || 5
+        );
+        const useful_life_years =
+          !Number.isNaN(usefulLifeRaw) && usefulLifeRaw >= 1 && usefulLifeRaw <= 50 ? usefulLifeRaw : 5;
+        const description = String(
+          row['คุณลักษณะเฉพาะ / รายละเอียด'] || row['รายละเอียด'] || row['description'] || ''
+        ).trim();
+        const notes = String(row['หมายเหตุ'] || row['notes'] || '').trim();
 
         if (!asset_code) rowErrors.push('ไม่มีเลขครุภัณฑ์');
         if (!name) rowErrors.push('ไม่มีชื่อครุภัณฑ์');
@@ -656,34 +761,65 @@ export function AssetRegistryPage() {
         }
 
         const matchedCat = categories.find(
-          (c) => c.code.toLowerCase() === category_code.toLowerCase() || c.name === category_code
+          (c) =>
+            c.code.toLowerCase() === category_code.toLowerCase() ||
+            c.name === category_code ||
+            `${c.code} - ${c.name}` === category_code
         );
         if (!matchedCat) {
-          rowErrors.push(`ไม่พบรหัสหมวดหมู่ "${category_code || '-'}"`);
+          rowErrors.push(`ไม่พบหมวดหมู่ "${category_code || '-'}"`);
         }
 
         const matchedDept = departments.find(
-          (d) => d.code.toLowerCase() === department_code.toLowerCase() || d.name === department_code
+          (d) =>
+            d.code.toLowerCase() === department_code.toLowerCase() ||
+            d.name === department_code ||
+            `${d.code} - ${d.name}` === department_code
         );
         if (!matchedDept) {
-          rowErrors.push(`ไม่พบรหัสหน่วยงาน "${department_code || '-'}"`);
+          rowErrors.push(`ไม่พบหน่วยงาน "${department_code || '-'}"`);
         }
+
+        const matchedLocation = location_code
+          ? locations.find(
+              (loc) =>
+                loc.code.toLowerCase() === location_code.toLowerCase() ||
+                loc.name === location_code ||
+                loc.room === location_code
+            )
+          : undefined;
+
+        const matchedCustodian = custodian_name
+          ? profiles.find(
+              (p) =>
+                p.full_name.toLowerCase() === custodian_name.toLowerCase() ||
+                p.email.toLowerCase() === custodian_name.toLowerCase()
+            )
+          : undefined;
 
         return {
           rowNumber: index + 2,
           asset_code,
           name,
           category_code,
-          department_code,
+          status,
           brand,
           model,
           serial_number,
           unit_price: Number.isNaN(unit_price) ? 0 : unit_price,
           acquired_date,
           contract_number,
+          department_code,
+          location_code,
+          custodian_name,
+          useful_life_years,
+          description,
+          notes,
           errors: rowErrors,
           category_id: matchedCat?.id,
           department_id: matchedDept?.id,
+          location_id: matchedLocation?.id,
+          custodian_id: matchedCustodian?.id,
         };
       });
 
@@ -707,14 +843,19 @@ export function AssetRegistryPage() {
         asset_code: r.asset_code,
         name: r.name,
         category_id: r.category_id!,
-        department_id: r.department_id!,
+        status: r.status || ('available' as AssetStatus),
         brand: r.brand || null,
         model: r.model || null,
         serial_number: r.serial_number || null,
         unit_price: r.unit_price,
-        acquired_date: r.acquired_date,
+        acquired_date: r.acquired_date || null,
         contract_number: r.contract_number || null,
-        status: 'available' as AssetStatus,
+        department_id: r.department_id!,
+        location_id: r.location_id || null,
+        custodian_id: r.custodian_id || null,
+        useful_life_years: r.useful_life_years || 5,
+        description: r.description || null,
+        notes: r.notes || null,
         created_by: user?.id || null,
         updated_by: user?.id || null,
       }));
@@ -1444,7 +1585,7 @@ export function AssetRegistryPage() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700">
-                วันที่รับเข้า / วันที่ตรวจรับ <span className="text-rose-600">*</span>
+                วันที่รับเข้า / วันที่ตรวจรับ <span className="text-slate-400 font-normal">(ไม่บังคับ)</span>
               </label>
               <input
                 type="date"
@@ -1634,8 +1775,8 @@ export function AssetRegistryPage() {
                 </button>
               </div>
             </div>
-            <p className="font-mono text-[11px] bg-white p-2.5 rounded-lg border border-slate-200">
-              asset_code (หรือ เลขครุภัณฑ์), name (หรือ ชื่อครุภัณฑ์), category_code (เช่น 7440), department_code (เช่น ITD), brand, model, serial_number, unit_price, acquired_date (YYYY-MM-DD), contract_number
+            <p className="font-mono text-[11px] bg-white p-2.5 rounded-lg border border-slate-200 leading-relaxed">
+              เลขครุภัณฑ์ *, ชื่อครุภัณฑ์ *, หมวดหมู่ครุภัณฑ์ *, สถานะครุภัณฑ์, ยี่ห้อ (Brand), รุ่น (Model), หมายเลขเครื่อง (Serial Number), ราคาต่อหน่วย (บาท) *, วันที่รับเข้า / วันที่ตรวจรับ (ไม่บังคับ), เลขที่สัญญาจัดซื้อ / ใบตรวจรับ, หน่วยงาน/กองผู้ครอบครอง *, อาคาร / ห้อง / สถานที่ตั้ง, ผู้รับผิดชอบดูแลครุภัณฑ์, อายุการใช้งานโดยประมาณ (ปี), คุณลักษณะเฉพาะ / รายละเอียด, หมายเหตุ
             </p>
             <input
               type="file"

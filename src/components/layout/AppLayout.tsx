@@ -264,7 +264,7 @@ export function AppLayout() {
               <div className="min-w-0">
                 <h2 className="truncate text-sm font-bold text-gov-800 sm:text-base">{orgName}</h2>
                 <p className="hidden text-xs text-slate-500 sm:block">
-                  ระบบสารสนเทศเพื่อการบริหารจัดการครุภัณฑ์และทรัพย์สินของทางราชการ
+                  สำนักหอสมุด มหาวิทยาลัยเชียงใหม่
                 </p>
               </div>
             </div>

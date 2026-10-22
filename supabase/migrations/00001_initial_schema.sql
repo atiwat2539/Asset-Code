@@ -147,7 +147,7 @@ CREATE TABLE IF NOT EXISTS public.assets (
   serial_number TEXT,
   description TEXT,
   unit_price NUMERIC(15,2) NOT NULL DEFAULT 0.00 CHECK (unit_price >= 0),
-  acquired_date DATE NOT NULL,
+  acquired_date DATE,
   contract_number TEXT,
   useful_life_years INTEGER CHECK (useful_life_years IS NULL OR (useful_life_years >= 1 AND useful_life_years <= 50)),
   status TEXT NOT NULL DEFAULT 'available' CHECK (
@@ -164,6 +164,8 @@ CREATE TABLE IF NOT EXISTS public.assets (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE public.assets ALTER COLUMN acquired_date DROP NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_assets_asset_code ON public.assets(asset_code);
 CREATE INDEX IF NOT EXISTS idx_assets_name ON public.assets(name);
