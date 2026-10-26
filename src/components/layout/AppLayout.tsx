@@ -37,84 +37,114 @@ interface NavItem {
   roles: UserRole[];
 }
 
-const NAV_ITEMS: NavItem[] = [
+interface NavSection {
+  title: string;
+  items: NavItem[];
+}
+
+const NAV_SECTIONS: NavSection[] = [
   {
-    label: 'แดชบอร์ดภาพรวม',
-    to: '/',
-    icon: LayoutDashboard,
-    roles: ['admin', 'asset_officer', 'requester'],
+    title: 'ภาพรวมและทะเบียน',
+    items: [
+      {
+        label: 'แดชบอร์ดภาพรวม',
+        to: '/',
+        icon: LayoutDashboard,
+        roles: ['admin', 'asset_officer', 'requester'],
+      },
+      {
+        label: 'ทะเบียนครุภัณฑ์',
+        to: '/assets',
+        icon: Package,
+        roles: ['admin', 'asset_officer', 'requester'],
+      },
+      {
+        label: 'สแกน / พิมพ์ QR & Barcode',
+        to: '/qr-barcode',
+        icon: QrCode,
+        roles: ['admin', 'asset_officer', 'requester'],
+      },
+    ],
   },
   {
-    label: 'ทะเบียนครุภัณฑ์',
-    to: '/assets',
-    icon: Package,
-    roles: ['admin', 'asset_officer', 'requester'],
+    title: 'บริการและธุรกรรม',
+    items: [
+      {
+        label: 'ระบบยืม-คืนครุภัณฑ์',
+        to: '/borrowing',
+        icon: Repeat,
+        roles: ['admin', 'asset_officer', 'requester'],
+      },
+      {
+        label: 'โอนย้ายสถานที่/ผู้รับผิดชอบ',
+        to: '/transfers',
+        icon: ArrowLeftRight,
+        roles: ['admin', 'asset_officer', 'requester'],
+      },
+      {
+        label: 'แจ้งซ่อมและบำรุงรักษา',
+        to: '/maintenance',
+        icon: Wrench,
+        roles: ['admin', 'asset_officer', 'requester'],
+      },
+    ],
   },
   {
-    label: 'สแกน / พิมพ์ QR & Barcode',
-    to: '/qr-barcode',
-    icon: QrCode,
-    roles: ['admin', 'asset_officer', 'requester'],
+    title: 'ตรวจนับและจำหน่าย',
+    items: [
+      {
+        label: 'ตรวจนับครุภัณฑ์ประจำปี',
+        to: '/inventory',
+        icon: ClipboardCheck,
+        roles: ['admin', 'asset_officer'],
+      },
+      {
+        label: 'การจำหน่าย / แทงจำหน่าย',
+        to: '/disposal',
+        icon: FileX2,
+        roles: ['admin', 'asset_officer'],
+      },
+    ],
   },
   {
-    label: 'ตรวจนับครุภัณฑ์ประจำปี',
-    to: '/inventory',
-    icon: ClipboardCheck,
-    roles: ['admin', 'asset_officer'],
+    title: 'รายงานและกิจกรรม',
+    items: [
+      {
+        label: 'ปฏิทินกิจกรรมองค์กร',
+        to: '/calendar',
+        icon: CalendarDays,
+        roles: ['admin', 'asset_officer', 'requester'],
+      },
+      {
+        label: 'รายงานและส่งออก',
+        to: '/reports',
+        icon: FileBarChart2,
+        roles: ['admin', 'asset_officer'],
+      },
+    ],
   },
   {
-    label: 'ระบบยืม-คืนครุภัณฑ์',
-    to: '/borrowing',
-    icon: Repeat,
-    roles: ['admin', 'asset_officer', 'requester'],
-  },
-  {
-    label: 'โอนย้ายสถานที่/ผู้รับผิดชอบ',
-    to: '/transfers',
-    icon: ArrowLeftRight,
-    roles: ['admin', 'asset_officer', 'requester'],
-  },
-  {
-    label: 'แจ้งซ่อมและบำรุงรักษา',
-    to: '/maintenance',
-    icon: Wrench,
-    roles: ['admin', 'asset_officer', 'requester'],
-  },
-  {
-    label: 'การจำหน่าย / แทงจำหน่าย',
-    to: '/disposal',
-    icon: FileX2,
-    roles: ['admin', 'asset_officer'],
-  },
-  {
-    label: 'ปฏิทินกิจกรรมองค์กร',
-    to: '/calendar',
-    icon: CalendarDays,
-    roles: ['admin', 'asset_officer', 'requester'],
-  },
-  {
-    label: 'รายงานและส่งออก',
-    to: '/reports',
-    icon: FileBarChart2,
-    roles: ['admin', 'asset_officer'],
-  },
-  {
-    label: 'ประวัติการใช้งาน (Audit Log)',
-    to: '/audit-logs',
-    icon: History,
-    roles: ['admin', 'asset_officer'],
-  },
-  {
-    label: 'จัดการผู้ใช้และหน่วยงาน',
-    to: '/users',
-    icon: Users,
-    roles: ['admin'],
-  },
-  {
-    label: 'ตั้งค่าระบบ',
-    to: '/settings',
-    icon: Settings,
-    roles: ['admin'],
+    title: 'การจัดการระบบ',
+    items: [
+      {
+        label: 'จัดการผู้ใช้และหน่วยงาน',
+        to: '/users',
+        icon: Users,
+        roles: ['admin'],
+      },
+      {
+        label: 'ประวัติการใช้งาน (Audit Log)',
+        to: '/audit-logs',
+        icon: History,
+        roles: ['admin', 'asset_officer'],
+      },
+      {
+        label: 'ตั้งค่าระบบ',
+        to: '/settings',
+        icon: Settings,
+        roles: ['admin'],
+      },
+    ],
   },
 ];
 
@@ -206,7 +236,10 @@ export function AppLayout() {
   const orgName = settings?.org_name || 'สำนักงานบริหารงานพัสดุและครุภัณฑ์กลาง';
   const orgShort = settings?.org_short_name || 'สบพ.';
 
-  const visibleNavItems = NAV_ITEMS.filter((item) => item.roles.includes(role));
+  const visibleSections = NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => item.roles.includes(role)),
+  })).filter((section) => section.items.length > 0);
 
   const handleSignOut = async () => {
     await signOut();
@@ -273,31 +306,43 @@ export function AppLayout() {
           </div>
 
           {/* Navigation Links */}
-          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-            {visibleNavItems.map((item) => {
-              const Icon = item.icon;
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  end={item.to === '/'}
-                  onClick={() => setMobileOpen(false)}
-                  className={({ isActive }) =>
-                    cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
-                      isActive
-                        ? 'bg-gov-600 text-white shadow-xs'
-                        : 'text-slate-300 hover:bg-white/10 hover:text-white',
-                      collapsed && 'justify-center px-2'
-                    )
-                  }
-                  title={collapsed ? item.label : undefined}
-                >
-                  <Icon className="h-5 w-5 shrink-0" />
-                  {!collapsed && <span className="truncate">{item.label}</span>}
-                </NavLink>
-              );
-            })}
+          <nav className="flex-1 space-y-3.5 overflow-y-auto px-3 py-4">
+            {visibleSections.map((section, sectionIdx) => (
+              <div key={section.title} className="space-y-1">
+                {!collapsed ? (
+                  <div className="flex items-center gap-2 px-3 pt-2 pb-1 text-[11px] font-bold uppercase tracking-wider text-gov-200/70">
+                    <span className="h-1.5 w-1.5 rounded-full bg-pantone-peri/80" />
+                    <span>{section.title}</span>
+                  </div>
+                ) : (
+                  sectionIdx > 0 && <div className="my-2 border-t border-white/10" />
+                )}
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end={item.to === '/'}
+                      onClick={() => setMobileOpen(false)}
+                      className={({ isActive }) =>
+                        cn(
+                          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                          isActive
+                            ? 'bg-gov-600 text-white shadow-xs font-semibold'
+                            : 'text-slate-300 hover:bg-white/10 hover:text-white',
+                          collapsed && 'justify-center px-2'
+                        )
+                      }
+                      title={collapsed ? item.label : undefined}
+                    >
+                      <Icon className="h-4.5 w-4.5 shrink-0" />
+                      {!collapsed && <span className="truncate">{item.label}</span>}
+                    </NavLink>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
 
           {/* Footer Role Info */}
