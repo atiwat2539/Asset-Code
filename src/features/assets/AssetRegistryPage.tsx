@@ -30,6 +30,8 @@ import {
   MapPin,
   User,
   Calendar,
+  ArrowRight,
+  Package,
 } from 'lucide-react';
 import { assertSupabaseConfigured, isSupabaseConfigured, recordAuditLog, supabase } from '@/lib/supabase';
 import {
@@ -1323,167 +1325,237 @@ export function AssetRegistryPage() {
           </div>
         </div>
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
-                <tr>
-                  <th className="px-4 py-3">รูป</th>
-                  <th className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort('asset_code')}
-                      className="inline-flex items-center gap-1 hover:text-gov-700"
-                    >
-                      เลขครุภัณฑ์ <ArrowUpDown className="h-3.5 w-3.5" />
-                    </button>
-                  </th>
-                  <th className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort('name')}
-                      className="inline-flex items-center gap-1 hover:text-gov-700"
-                    >
-                      ชื่อและรายละเอียด <ArrowUpDown className="h-3.5 w-3.5" />
-                    </button>
-                  </th>
-                  <th className="px-4 py-3">หมวดหมู่</th>
-                  <th className="px-4 py-3">หน่วยงาน / สถานที่ตั้ง</th>
-                  <th className="px-4 py-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort('unit_price')}
-                      className="inline-flex items-center gap-1 hover:text-gov-700"
-                    >
-                      ราคาต่อหน่วย <ArrowUpDown className="h-3.5 w-3.5" />
-                    </button>
-                  </th>
-                  <th className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleSort('acquired_date')}
-                      className="inline-flex items-center gap-1 hover:text-gov-700"
-                    >
-                      วันที่รับเข้า <ArrowUpDown className="h-3.5 w-3.5" />
-                    </button>
-                  </th>
-                  <th className="px-4 py-3">สถานะ</th>
-                  <th className="px-4 py-3 text-right">จัดการ</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 text-xs sm:text-sm">
-                {paginatedAssets.map((asset) => {
-                  const statusMeta = ASSET_STATUS_META[asset.status];
-                  return (
-                    <tr key={asset.id} className="hover:bg-slate-50/80">
-                      <td className="px-4 py-3">
-                        {asset.image_url ? (
-                          <img
-                            src={asset.image_url}
-                            alt={asset.name}
-                            className="h-10 w-10 rounded-lg object-cover border border-slate-200"
-                          />
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-400">
-                            <ImageIcon className="h-5 w-5" />
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 font-mono font-semibold text-gov-700 whitespace-nowrap">
-                        <Link to={`/assets/${asset.id}`} className="hover:underline">
-                          {asset.asset_code}
-                        </Link>
-                        {asset.serial_number && (
-                          <p className="text-[11px] font-normal text-slate-400">
-                            S/N: {asset.serial_number}
-                          </p>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="font-semibold text-slate-900">{asset.name}</p>
-                        <p className="text-xs text-slate-500">
-                          {[asset.brand, asset.model].filter(Boolean).join(' • ') || 'ไม่ระบุยี่ห้อ/รุ่น'}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">{asset.category?.name || '-'}</td>
-                      <td className="px-4 py-3">
-                        <p className="font-medium text-slate-800">{asset.department?.name || '-'}</p>
-                        <p className="text-xs text-slate-500">
-                          {asset.location
-                            ? `${asset.location.building} ห้อง ${asset.location.room || '-'}`
-                            : 'ไม่ระบุห้อง'}
-                          {asset.custodian ? ` • ${asset.custodian.full_name}` : ''}
-                        </p>
-                      </td>
-                      <td className="px-4 py-3 text-right font-medium text-slate-800 whitespace-nowrap">
-                        {formatCurrency(asset.unit_price)}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                        {formatThaiDate(asset.acquired_date)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge
-                          label={statusMeta?.label || asset.status}
-                          className={statusMeta?.badgeClass}
-                          dotClass={statusMeta?.dotClass}
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center gap-1">
-                          <Link
-                            to={`/assets/${asset.id}`}
-                            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 hover:text-gov-700"
-                            title="ดูรายละเอียดครบทุก Tab"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Link>
-                          <Link
-                            to={`/qr-barcode?assetId=${asset.id}`}
-                            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 hover:text-gov-700"
-                            title="พิมพ์ฉลาก QR / Barcode"
-                          >
-                            <QrCode className="h-4 w-4" />
-                          </Link>
-                          {canEdit && (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => openEditModal(asset)}
-                                className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 hover:text-gov-700"
-                                title="แก้ไขข้อมูลครุภัณฑ์"
-                              >
-                                <Edit3 className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeletingAsset(asset)}
-                                className="rounded-lg p-1.5 text-rose-600 hover:bg-rose-50 hover:text-rose-700"
-                                title="ลบครุภัณฑ์"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        <div className="space-y-4">
+          {/* แถบจัดเรียงลำดับและแสดงสถิติข้อมูล */}
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/90 bg-white px-5 py-3.5 text-xs shadow-2xs">
+            <div className="text-slate-600 font-medium">
+              พบครุภัณฑ์ทั้งหมด <strong className="text-gov-800 font-bold">{filteredAssets.length}</strong> รายการ (หน้า {currentPage}/{totalPages})
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-slate-500 font-medium">เรียงตาม:</span>
+              <div className="inline-flex rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => toggleSort('asset_code')}
+                  className={`px-3 py-1 rounded-md font-semibold transition ${
+                    sortField === 'asset_code' ? 'bg-white text-gov-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  เลขครุภัณฑ์
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('name')}
+                  className={`px-3 py-1 rounded-md font-semibold transition ${
+                    sortField === 'name' ? 'bg-white text-gov-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  ชื่อครุภัณฑ์
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('unit_price')}
+                  className={`px-3 py-1 rounded-md font-semibold transition ${
+                    sortField === 'unit_price' ? 'bg-white text-gov-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  ราคา
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleSort('acquired_date')}
+                  className={`px-3 py-1 rounded-md font-semibold transition ${
+                    sortField === 'acquired_date' ? 'bg-white text-gov-700 shadow-2xs' : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  วันที่รับเข้า
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSortAsc((prev) => !prev)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1 text-slate-700 hover:bg-slate-50 font-medium transition"
+                title={sortAsc ? 'เรียงจากน้อยไปมาก' : 'เรียงจากมากไปน้อย'}
+              >
+                <ArrowUpDown className="h-3.5 w-3.5 text-gov-700" />
+                <span>{sortAsc ? 'น้อยไปมาก' : 'มากไปน้อย'}</span>
+              </button>
+            </div>
           </div>
 
-          <PaginationControls
-            currentPage={currentPage}
-            totalPages={totalPages}
-            totalItems={filteredAssets.length}
-            pageSize={pageSize}
-            onPageChange={setCurrentPage}
-            onPageSizeChange={(size) => {
-              setPageSize(size);
-              setCurrentPage(1);
-            }}
-          />
+          {/* แสดงผลรายการครุภัณฑ์แยกตาม Container สไตล์โมเดิร์นคล้ายภาพต้นแบบ */}
+          <div className="space-y-4">
+            {paginatedAssets.map((asset) => {
+              const statusMeta = ASSET_STATUS_META[asset.status];
+              return (
+                <div
+                  key={asset.id}
+                  className="group relative flex flex-col md:flex-row overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-gov-400"
+                >
+                  {/* กล่องรูปภาพด้านซ้าย พร้อม Pill Badge มุมบนซ้าย คล้ายแท็ก UI/UX ในภาพต้นแบบ */}
+                  <div className="relative w-full md:w-64 lg:w-72 shrink-0 bg-slate-100 overflow-hidden min-h-[190px] md:min-h-full flex items-center justify-center">
+                    {/* Pill Badge สไตล์เดียวกับตัวอย่าง */}
+                    <span className="absolute top-3.5 left-3.5 z-10 inline-flex items-center gap-1 rounded-full bg-sky-100/95 px-3 py-1 text-xs font-bold text-sky-800 shadow-2xs border border-sky-200/90 backdrop-blur-xs">
+                      {asset.category?.name || 'ครุภัณฑ์'}
+                    </span>
+
+                    {asset.image_url ? (
+                      <img
+                        src={asset.image_url}
+                        alt={asset.name}
+                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-2 p-6 text-slate-400 bg-gradient-to-br from-slate-100 via-slate-50 to-[#ECE8F5]">
+                        <Package className="h-12 w-12 text-gov-600/50" />
+                        <span className="text-xs font-medium text-slate-500">ไม่มีรูปภาพครุภัณฑ์</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* กล่องรายละเอียดเนื้อหาด้านขวา ครบถ้วนทุกฟิลด์ */}
+                  <div className="flex-1 p-5 sm:p-6 flex flex-col justify-between gap-3.5">
+                    <div>
+                      {/* แถวข้อมูลส่วนหัว: เลขครุภัณฑ์, สถานะ, และราคาต่อหน่วย */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-xs font-bold text-gov-800 bg-gov-50 border border-gov-200/90 px-2.5 py-0.5 rounded-md shadow-2xs">
+                            {asset.asset_code}
+                          </span>
+                          {asset.serial_number && (
+                            <span className="text-[11px] font-mono text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
+                              S/N: {asset.serial_number}
+                            </span>
+                          )}
+                          <StatusBadge
+                            label={statusMeta?.label || asset.status}
+                            className={statusMeta?.badgeClass}
+                            dotClass={statusMeta?.dotClass}
+                          />
+                        </div>
+
+                        <div className="text-right">
+                          <span className="font-bold text-sm sm:text-base text-emerald-700 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200 shadow-2xs">
+                            {formatCurrency(asset.unit_price)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* ชื่อครุภัณฑ์ (หัวข้อเด่นชัด คล้าย UI Design practices ในภาพต้นแบบ) */}
+                      <h3 className="mt-1">
+                        <Link
+                          to={`/assets/${asset.id}`}
+                          className="text-base sm:text-lg font-bold text-slate-900 hover:text-gov-700 transition-colors line-clamp-1 leading-snug"
+                        >
+                          {asset.name}
+                        </Link>
+                      </h3>
+
+                      {/* คำอธิบายและคุณลักษณะเฉพาะ (ย่อหน้าแบบในภาพต้นแบบ) */}
+                      <p className="mt-1.5 text-xs sm:text-sm text-slate-600 line-clamp-2 leading-relaxed">
+                        {asset.description ||
+                          ([asset.brand, asset.model].filter(Boolean).join(' • ')
+                            ? `ยี่ห้อ/รุ่น: ${[asset.brand, asset.model].filter(Boolean).join(' • ')}`
+                            : 'ไม่มีรายละเอียดคุณลักษณะเฉพาะเพิ่มเติม')}
+                      </p>
+
+                      {/* รายละเอียดประกอบครบถ้วน */}
+                      <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-3 border-t border-slate-100 text-xs">
+                        <div className="flex items-center gap-1.5 text-slate-600 min-w-0">
+                          <Building2 className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          <span className="truncate">
+                            <strong className="text-slate-700 font-semibold">หน่วยงาน:</strong> {asset.department?.name || '-'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-slate-600 min-w-0">
+                          <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          <span className="truncate">
+                            <strong className="text-slate-700 font-semibold">สถานที่:</strong>{' '}
+                            {asset.location ? `${asset.location.building} ห้อง ${asset.location.room || '-'}` : '-'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-slate-600 min-w-0">
+                          <User className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          <span className="truncate">
+                            <strong className="text-slate-700 font-semibold">ผู้ดูแล:</strong> {asset.custodian?.full_name || 'ไม่ระบุ'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-slate-600 min-w-0">
+                          <Calendar className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                          <span className="truncate">
+                            <strong className="text-slate-700 font-semibold">รับเข้า:</strong> {formatThaiDate(asset.acquired_date)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ส่วนท้าย: ลิงก์ read more / ดูรายละเอียด และปุ่มดำเนินการ */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-100">
+                      {/* ลิงก์ดูรายละเอียดเพิ่มเติม คล้ายปุ่ม read more สีฟ้าในภาพตัวอย่าง */}
+                      <Link
+                        to={`/assets/${asset.id}`}
+                        className="text-xs sm:text-sm font-bold text-sky-600 hover:text-sky-700 hover:underline inline-flex items-center gap-1 transition-colors"
+                      >
+                        ดูรายละเอียดเพิ่มเติม <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+
+                      {/* ปุ่มการทำงานด่วน */}
+                      <div className="inline-flex items-center gap-1.5">
+                        <Link
+                          to={`/qr-barcode?assetId=${asset.id}`}
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-gov-700 transition"
+                          title="พิมพ์ฉลาก QR / Barcode"
+                        >
+                          <QrCode className="h-3.5 w-3.5" />
+                          <span className="hidden sm:inline">QR / Barcode</span>
+                        </Link>
+                        {canEdit && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => openEditModal(asset)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-gov-700 transition"
+                              title="แก้ไขข้อมูลครุภัณฑ์"
+                            >
+                              <Edit3 className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">แก้ไข</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingAsset(asset)}
+                              className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-100 hover:text-rose-700 transition"
+                              title="ลบครุภัณฑ์"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">ลบ</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* แถบแบ่งหน้า Pagination */}
+          <div className="rounded-xl border border-slate-200 bg-white shadow-2xs overflow-hidden mt-6">
+            <PaginationControls
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={filteredAssets.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
         </div>
       )}
 
