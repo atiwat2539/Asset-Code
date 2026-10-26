@@ -1416,17 +1416,12 @@ export function AssetRegistryPage() {
                   {/* กล่องรายละเอียดเนื้อหาด้านขวา ครบถ้วนทุกฟิลด์ */}
                   <div className="flex-1 p-5 sm:p-6 flex flex-col justify-between gap-3.5">
                     <div>
-                      {/* แถวข้อมูลส่วนหัว: เลขครุภัณฑ์, สถานะ, และราคาต่อหน่วย */}
+                      {/* แถวข้อมูลส่วนหัว: เลขครุภัณฑ์ (ขนาดใหญ่ขึ้นตามต้องการ), สถานะ, และราคาต่อหน่วย */}
                       <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-gov-800 bg-gov-50 border border-gov-200/90 px-2.5 py-0.5 rounded-md shadow-2xs">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <span className="font-mono text-sm sm:text-base font-extrabold text-gov-900 bg-gov-50/90 border border-gov-300/80 px-3 py-1 rounded-lg shadow-2xs tracking-wide">
                             {asset.asset_code}
                           </span>
-                          {asset.serial_number && (
-                            <span className="text-[11px] font-mono text-slate-500 bg-slate-50 px-2 py-0.5 rounded border border-slate-200">
-                              S/N: {asset.serial_number}
-                            </span>
-                          )}
                           <StatusBadge
                             label={statusMeta?.label || asset.status}
                             className={statusMeta?.badgeClass}
@@ -1451,13 +1446,31 @@ export function AssetRegistryPage() {
                         </Link>
                       </h3>
 
+                      {/* ข้อมูลยี่ห้อ/รุ่น และ Serial Number (S/N) ย้ายลงมาวางคู่กันอย่างชัดเจน */}
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
+                        <span className="inline-flex items-center gap-1.5 text-slate-700 font-medium">
+                          <span className="text-slate-500 font-semibold">ยี่ห้อ/รุ่น:</span>
+                          <strong className="text-slate-900 font-bold">
+                            {[asset.brand, asset.model].filter(Boolean).join(' • ') || 'ไม่ระบุยี่ห้อ/รุ่น'}
+                          </strong>
+                        </span>
+                        {asset.serial_number && (
+                          <>
+                            <span className="text-slate-300">•</span>
+                            <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/90 px-2.5 py-0.5 rounded-md">
+                              <span className="text-slate-500 font-normal">S/N:</span>
+                              <strong className="text-slate-900">{asset.serial_number}</strong>
+                            </span>
+                          </>
+                        )}
+                      </div>
+
                       {/* คำอธิบายและคุณลักษณะเฉพาะ (ย่อหน้าแบบในภาพต้นแบบ) */}
-                      <p className="mt-1.5 text-xs sm:text-sm text-slate-600 line-clamp-2 leading-relaxed">
-                        {asset.description ||
-                          ([asset.brand, asset.model].filter(Boolean).join(' • ')
-                            ? `ยี่ห้อ/รุ่น: ${[asset.brand, asset.model].filter(Boolean).join(' • ')}`
-                            : 'ไม่มีรายละเอียดคุณลักษณะเฉพาะเพิ่มเติม')}
-                      </p>
+                      {asset.description && (
+                        <p className="mt-2 text-xs sm:text-sm text-slate-600 line-clamp-2 leading-relaxed">
+                          {asset.description}
+                        </p>
+                      )}
 
                       {/* รายละเอียดประกอบครบถ้วน */}
                       <div className="mt-3.5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-3 border-t border-slate-100 text-xs">
