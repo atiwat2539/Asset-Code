@@ -39,7 +39,8 @@ import {
 } from '@/lib/utils';
 import { formatThaiDate, formatThaiDateTime } from '@/lib/date';
 import { useAuth } from '@/features/auth/AuthContext';
-import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge } from '@/components/ui/common';
+import { EmptyState, ErrorState, LoadingState, PageHeader, StatusBadge, StatCardSkeleton, Skeleton } from '@/components/ui/common';
+import { useCountUp } from '@/hooks/useCountUp';
 import type { Asset, BorrowRequest, CorporateEvent } from '@/types/database';
 
 // ชุดสี PANTONE (Greenery, Serenity, Peach Fuzz, Living Coral, Mocha Mousse, Very Peri)
@@ -56,6 +57,58 @@ function formatFullThaiCurrentDate(date: Date): string {
   } catch {
     return formatThaiDate(date.toISOString());
   }
+}
+
+interface StatCardData {
+  label: string;
+  rawNumber: number;
+  isCurrency?: boolean;
+  unit?: string;
+  sub: string;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  hoverCard: string;
+  topBar: string;
+  valueHover: string;
+}
+
+function StatCardItem({ card }: { card: StatCardData }) {
+  const animatedValue = useCountUp(card.rawNumber, 900);
+  const displayValue = card.isCurrency
+    ? formatCurrency(animatedValue)
+    : `${formatNumber(animatedValue)} ${card.unit || ''}`.trim();
+  const Icon = card.icon;
+
+  return (
+    <div
+      className={`group relative overflow-hidden rounded-xl border border-slate-200/90 bg-white p-5 shadow-2xs transition-all duration-300 card-interactive cursor-pointer ${card.hoverCard}`}
+    >
+      {/* แถบสีด้านบนที่จะขยายเต็มเมื่อ Hover */}
+      <div
+        className={`absolute inset-x-0 top-0 h-1 w-0 bg-gradient-to-r ${card.topBar} transition-all duration-300 group-hover:w-full`}
+      />
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-slate-500 transition-colors group-hover:text-slate-700">
+            {card.label}
+          </p>
+          <p
+            className={`mt-1.5 text-lg font-bold text-slate-900 sm:text-xl transition-colors ${card.valueHover}`}
+          >
+            {displayValue}
+          </p>
+          <p className="mt-1 text-xs text-slate-500 transition-colors group-hover:text-slate-600">
+            {card.sub}
+          </p>
+        </div>
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-md transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 ${card.color}`}
+        >
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function DashboardPage() {
@@ -237,7 +290,31 @@ export function DashboardPage() {
   }
 
   if (isLoading) {
-    return <LoadingState message="กำลังประมวลผลข้อมูลสถิติครุภัณฑ์จาก Supabase..." />;
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <PageHeader
+          title="แดชบอร์ดภาพรวม"
+          subtitle="สรุปสถานะครุภัณฑ์และการบริหารจัดการพัสดุแบบเรียลไทม์"
+        />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <StatCardSkeleton key={i} />
+          ))}
+        </div>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <div className="h-80 rounded-xl border border-slate-200/90 bg-white p-5 lg:col-span-2">
+            <Skeleton className="h-5 w-48 mb-2" />
+            <Skeleton className="h-3 w-64 mb-6" />
+            <Skeleton className="h-52 w-full" />
+          </div>
+          <div className="h-80 rounded-xl border border-slate-200/90 bg-white p-5">
+            <Skeleton className="h-5 w-36 mb-2" />
+            <Skeleton className="h-3 w-48 mb-6" />
+            <Skeleton className="h-48 w-48 rounded-full mx-auto" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (error || !dashboardData) {
@@ -252,7 +329,8 @@ export function DashboardPage() {
   const statCards = [
     {
       label: 'จำนวนครุภัณฑ์ทั้งหมด',
-      value: `${formatNumber(dashboardData.totalAssets)} รายการ`,
+      rawNumber: dashboardData.totalAssets,
+      unit: 'รายการ',
       sub: `พร้อมใช้งาน ${formatNumber(dashboardData.availableCount)} รายการ`,
       icon: Package,
       // PANTONE 17-3938 Very Peri
@@ -264,7 +342,8 @@ export function DashboardPage() {
     },
     {
       label: 'มูลค่าครุภัณฑ์รวม (ไม่รวมจำหน่าย)',
-      value: formatCurrency(dashboardData.totalValue),
+      rawNumber: dashboardData.totalValue,
+      isCurrency: true,
       sub: 'คำนวณตามราคาทุนที่ขึ้นทะเบียน',
       icon: Banknote,
       // PANTONE Greenery / Sage
@@ -276,7 +355,8 @@ export function DashboardPage() {
     },
     {
       label: 'ครุภัณฑ์พร้อมใช้งาน',
-      value: `${formatNumber(dashboardData.availableCount)} รายการ`,
+      rawNumber: dashboardData.availableCount,
+      unit: 'รายการ',
       sub: 'สามารถเบิก/ขอยืมปฏิบัติงานได้',
       icon: CheckCircle2,
       // PANTONE Biscay Green / Teal Sage
@@ -288,7 +368,8 @@ export function DashboardPage() {
     },
     {
       label: 'ครุภัณฑ์ที่กำลังถูกยืม',
-      value: `${formatNumber(dashboardData.borrowedCount)} รายการ`,
+      rawNumber: dashboardData.borrowedCount,
+      unit: 'รายการ',
       sub: 'อยู่ระหว่างการยืมใช้งานราชการ',
       icon: Repeat,
       // PANTONE 15-3919 Serenity
@@ -300,7 +381,8 @@ export function DashboardPage() {
     },
     {
       label: 'อยู่ระหว่างซ่อมบำรุง',
-      value: `${formatNumber(dashboardData.maintenanceCount)} รายการ`,
+      rawNumber: dashboardData.maintenanceCount,
+      unit: 'รายการ',
       sub: `ใบแจ้งซ่อมคงค้าง ${dashboardData.activeMaintenanceTickets} ใบ`,
       icon: Wrench,
       // PANTONE 13-1023 Peach Fuzz / Warm Apricot
@@ -312,7 +394,8 @@ export function DashboardPage() {
     },
     {
       label: 'คำขอที่รออนุมัติรวม',
-      value: `${formatNumber(dashboardData.pendingApprovals)} รายการ`,
+      rawNumber: dashboardData.pendingApprovals,
+      unit: 'รายการ',
       sub: 'ยืม-คืน / โอนย้าย / แทงจำหน่าย',
       icon: Clock,
       // PANTONE 16-1546 Living Coral / Rose Quartz
@@ -324,7 +407,8 @@ export function DashboardPage() {
     },
     {
       label: 'รอบตรวจนับที่กำลังดำเนินการ',
-      value: `${formatNumber(dashboardData.activeInventorySessions.length)} รอบ`,
+      rawNumber: dashboardData.activeInventorySessions.length,
+      unit: 'รอบ',
       sub:
         dashboardData.activeInventorySessions[0]?.session_code ||
         'ไม่มีรอบตรวจนับที่ค้างอยู่',
@@ -338,7 +422,8 @@ export function DashboardPage() {
     },
     {
       label: 'กิจกรรมที่กำลังจะมาถึง',
-      value: `${formatNumber(dashboardData.upcomingEvents.length)} กิจกรรม`,
+      rawNumber: dashboardData.upcomingEvents.length,
+      unit: 'กิจกรรม',
       sub: 'ปฏิทินงานพัสดุและองค์กร',
       icon: CalendarDays,
       // PANTONE 17-1230 Mocha Mousse
@@ -407,42 +492,11 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* KPI Cards พร้อม Hover Color Effect */}
+      {/* KPI Cards พร้อม Hover Color Effect & Count-Up Animation */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {statCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <div
-              key={card.label}
-              className={`group relative overflow-hidden rounded-xl border border-slate-200 bg-white p-5 shadow-2xs transition-all duration-300 hover:-translate-y-1.5 hover:scale-[1.02] cursor-pointer ${card.hoverCard}`}
-            >
-              {/* แถบสีด้านบนที่จะขยายเต็มเมื่อ Hover */}
-              <div
-                className={`absolute inset-x-0 top-0 h-1 w-0 bg-gradient-to-r ${card.topBar} transition-all duration-300 group-hover:w-full`}
-              />
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-slate-500 transition-colors group-hover:text-slate-700">
-                    {card.label}
-                  </p>
-                  <p
-                    className={`mt-1.5 text-lg font-bold text-slate-900 sm:text-xl transition-colors ${card.valueHover}`}
-                  >
-                    {card.value}
-                  </p>
-                  <p className="mt-1 text-xs text-slate-500 transition-colors group-hover:text-slate-600">
-                    {card.sub}
-                  </p>
-                </div>
-                <div
-                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl shadow-md transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 ${card.color}`}
-                >
-                  <Icon className="h-5 w-5" />
-                </div>
-              </div>
-            </div>
-          );
-        })}
+        {statCards.map((card) => (
+          <StatCardItem key={card.label} card={card} />
+        ))}
       </div>
 
       {/* Charts Row */}

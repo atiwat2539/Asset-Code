@@ -35,6 +35,7 @@ import { getSignedFileUrl, uploadFileToBucket, type StorageBucketName } from '@/
 import { useAuth } from '@/features/auth/AuthContext';
 import { useCategories, useDepartments, useLocations, useProfiles } from '@/hooks/useMasterData';
 import { ConfirmDialog, ErrorState, LoadingState, Modal, StatusBadge } from '@/components/ui/common';
+import { CopyButton } from '@/components/ui/CopyButton';
 import type {
   Asset,
   AssetAttachment,
@@ -423,6 +424,7 @@ export function AssetDetailPage() {
           <div>
             <div className="flex items-center gap-2">
               <span className="font-mono text-sm font-bold text-gov-700">{asset.asset_code}</span>
+              <CopyButton text={asset.asset_code} title="คัดลอกเลขครุภัณฑ์" />
               <StatusBadge
                 label={statusMeta?.label || asset.status}
                 className={statusMeta?.badgeClass}
@@ -506,7 +508,10 @@ export function AssetDetailPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
                 <div className="rounded-lg border border-slate-200 p-3.5">
                   <p className="text-xs text-slate-500">เลขครุภัณฑ์</p>
-                  <p className="mt-1 font-mono font-bold text-slate-900">{asset.asset_code}</p>
+                  <div className="mt-1 flex items-center justify-between gap-1">
+                    <p className="font-mono font-bold text-slate-900">{asset.asset_code}</p>
+                    <CopyButton text={asset.asset_code} title="คัดลอกเลขครุภัณฑ์" />
+                  </div>
                 </div>
                 <div className="rounded-lg border border-slate-200 p-3.5">
                   <p className="text-xs text-slate-500">ประเภท / หมวดหมู่</p>
@@ -522,9 +527,14 @@ export function AssetDetailPage() {
                 </div>
                 <div className="rounded-lg border border-slate-200 p-3.5">
                   <p className="text-xs text-slate-500">หมายเลขเครื่อง (Serial Number)</p>
-                  <p className="mt-1 font-mono font-semibold text-slate-900">
-                    {asset.serial_number || '-'}
-                  </p>
+                  <div className="mt-1 flex items-center justify-between gap-1">
+                    <p className="font-mono font-semibold text-slate-900">
+                      {asset.serial_number || '-'}
+                    </p>
+                    {asset.serial_number && (
+                      <CopyButton text={asset.serial_number} title="คัดลอก S/N" />
+                    )}
+                  </div>
                 </div>
                 <div className="rounded-lg border border-slate-200 p-3.5">
                   <p className="text-xs text-slate-500">ราคาต่อหน่วย (ราคาทุน)</p>

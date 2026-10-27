@@ -2,23 +2,35 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 import { AlertTriangle, CheckCircle2, Info, Loader2, Inbox, RefreshCw, X } from 'lucide-react';
 
+export * from './Skeleton';
+
 export function StatusBadge({
   label,
   className,
   dotClass,
+  pulseDot = false,
 }: {
   label: string;
   className?: string;
   dotClass?: string;
+  pulseDot?: boolean;
 }) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap',
+        'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap transition-transform duration-150 hover:scale-105',
         className
       )}
     >
-      {dotClass && <span className={cn('h-1.5 w-1.5 rounded-full', dotClass)} />}
+      {dotClass && (
+        <span
+          className={cn(
+            'h-1.5 w-1.5 rounded-full',
+            pulseDot && 'animate-pulse',
+            dotClass
+          )}
+        />
+      )}
       {label}
     </span>
   );

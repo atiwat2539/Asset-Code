@@ -21,7 +21,9 @@ import {
   Menu,
   X,
   UserCircle2,
+  Search,
 } from 'lucide-react';
+import { GlobalCommandPalette } from './GlobalCommandPalette';
 import { cn, ROLE_LABELS } from '@/lib/utils';
 import { formatThaiDate, formatThaiDateNumeric, formatThaiDateTime } from '@/lib/date';
 import { useAuth } from '@/features/auth/AuthContext';
@@ -153,6 +155,19 @@ export function AppLayout() {
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  // ฟังคีย์ลัด Ctrl + K หรือ Cmd + K เพื่อเปิด Quick Command Palette จากทุกหน้า
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // แปลงการแสดงผลของ <input type="date"> และ <input type="datetime-local"> ทุกจุดในระบบให้แสดงเป็นปี พ.ศ. อัตโนมัติ
   useEffect(() => {
@@ -386,6 +401,28 @@ export function AppLayout() {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* แถบค้นหาด่วนระดับสากล (Global Quick Search Trigger) */}
+              <button
+                type="button"
+                onClick={() => setCommandPaletteOpen(true)}
+                className="hidden sm:inline-flex items-center gap-2 rounded-xl border border-slate-200/90 bg-slate-50 px-3 py-1.5 text-xs text-slate-500 shadow-2xs hover:border-gov-400 hover:bg-white hover:text-slate-800 transition-all btn-tactile"
+                title="ค้นหาครุภัณฑ์หรือเมนูนำทาง (Ctrl + K หรือ Cmd + K)"
+              >
+                <Search className="h-3.5 w-3.5 text-gov-600" />
+                <span>ค้นหาด่วน...</span>
+                <kbd className="inline-flex items-center gap-0.5 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 shadow-2xs">
+                  ⌘K
+                </kbd>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCommandPaletteOpen(true)}
+                className="inline-flex sm:hidden rounded-lg p-2 text-slate-500 hover:bg-slate-100 btn-tactile"
+                aria-label="ค้นหาด่วน"
+              >
+                <Search className="h-4 w-4" />
+              </button>
+
               <div className="hidden text-right sm:block">
                 <p className="text-xs font-semibold text-slate-800">
                   {profile?.full_name || user?.email || 'โหมดตรวจสอบระบบ'}
@@ -421,11 +458,17 @@ export function AppLayout() {
           </header>
 
           {/* Page Content */}
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1600px] w-full mx-auto">
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1600px] w-full mx-auto animate-fade-in">
             <Outlet />
           </main>
         </div>
       </div>
+
+      {/* หน้าต่างค้นหาด่วนระดับสากล (Global Command Palette: Ctrl + K) */}
+      <GlobalCommandPalette
+        open={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+      />
     </div>
   );
 }

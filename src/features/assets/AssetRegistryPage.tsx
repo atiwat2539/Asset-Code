@@ -52,7 +52,11 @@ import {
   PageHeader,
   PaginationControls,
   StatusBadge,
+  AssetContainerSkeleton,
 } from '@/components/ui/common';
+import { CopyButton } from '@/components/ui/CopyButton';
+import { AssetQuickViewDrawer } from './AssetQuickViewDrawer';
+import { triggerPantoneConfetti } from '@/lib/confetti';
 import type { Asset, AssetStatus } from '@/types/database';
 
 const assetFormSchema = z.object({
@@ -207,6 +211,9 @@ export function AssetRegistryPage() {
   const [isDeletingAsset, setIsDeletingAsset] = useState(false);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [docFile, setDocFile] = useState<File | null>(null);
+
+  // Quick View Drawer state
+  const [quickViewAsset, setQuickViewAsset] = useState<Asset | null>(null);
 
   // Import CSV/XLSX state
   const [isImportOpen, setIsImportOpen] = useState(false);
@@ -441,6 +448,9 @@ export function AssetRegistryPage() {
       }
 
       toast.success(editingAsset ? 'บันทึกการแก้ไขครุภัณฑ์สำเร็จ' : 'ขึ้นทะเบียนครุภัณฑ์ใหม่สำเร็จ');
+      if (!editingAsset) {
+        triggerPantoneConfetti();
+      }
       setIsFormOpen(false);
       queryClient.invalidateQueries({ queryKey: ['assets-list'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] });
@@ -897,6 +907,7 @@ export function AssetRegistryPage() {
       });
 
       toast.success(`นำเข้าข้อมูลครุภัณฑ์สำเร็จ ${validRows.length} รายการ`);
+      triggerPantoneConfetti();
       setIsImportOpen(false);
       setImportRows([]);
       queryClient.invalidateQueries({ queryKey: ['assets-list'] });
@@ -1118,9 +1129,13 @@ export function AssetRegistryPage() {
         </div>
       </div>
 
-      {/* ตารางแสดงผล */}
+      {/* ตาราง/คอนเทนเนอร์แสดงผล */}
       {isLoading ? (
-        <LoadingState message="กำลังโหลดทะเบียนครุภัณฑ์..." />
+        <div className="space-y-4 animate-fade-in">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <AssetContainerSkeleton key={i} />
+          ))}
+        </div>
       ) : error ? (
         <ErrorState message={translateSupabaseError(error)} onRetry={() => refetch()} />
       ) : filteredAssets.length === 0 ? (
@@ -1383,14 +1398,15 @@ export function AssetRegistryPage() {
             </div>
           </div>
 
-          {/* แสดงผลรายการครุภัณฑ์แยกตาม Container สไตล์โมเดิร์นคล้ายภาพต้นแบบ */}
+          {/* แสดงผลรายการครุภัณฑ์แยกตาม Container สไตล์โมเดิร์นพร้อมแอนิเมชัน */}
           <div className="space-y-4">
-            {paginatedAssets.map((asset) => {
+            {paginatedAssets.map((asset, idx) => {
               const statusMeta = ASSET_STATUS_META[asset.status];
               return (
                 <div
                   key={asset.id}
-                  className="group relative flex flex-col md:flex-row overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:border-gov-400"
+                  style={{ animationDelay: `${Math.min(idx * 35, 350)}ms` }}
+                  className="group relative flex flex-col md:flex-row overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:shadow-pantone-md hover:border-gov-400 card-interactive animate-slide-up"
                 >
                   {/* กล่องรูปภาพด้านซ้าย พร้อม Pill Badge มุมบนซ้าย คล้ายแท็ก UI/UX ในภาพต้นแบบ */}
                   <div className="relative w-full md:w-64 lg:w-72 shrink-0 bg-slate-100 overflow-hidden min-h-[190px] md:min-h-full flex items-center justify-center">
@@ -1416,16 +1432,18 @@ export function AssetRegistryPage() {
                   {/* กล่องรายละเอียดเนื้อหาด้านขวา ครบถ้วนทุกฟิลด์ */}
                   <div className="flex-1 p-5 sm:p-6 flex flex-col justify-between gap-3.5">
                     <div>
-                      {/* แถวข้อมูลส่วนหัว: เลขครุภัณฑ์ (ขนาดใหญ่ขึ้นตามต้องการ), สถานะ, และราคาต่อหน่วย */}
+                      {/* แถวข้อมูลส่วนหัว: เลขครุภัณฑ์ (ขนาดใหญ่ขึ้นพร้อมปุ่มคัดลอก), สถานะ, และราคาต่อหน่วย */}
                       <div className="flex flex-wrap items-center justify-between gap-2 pb-2">
-                        <div className="flex flex-wrap items-center gap-2.5">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span className="font-mono text-sm sm:text-base font-extrabold text-gov-900 bg-gov-50/90 border border-gov-300/80 px-3 py-1 rounded-lg shadow-2xs tracking-wide">
                             {asset.asset_code}
                           </span>
+                          <CopyButton text={asset.asset_code} title="คัดลอกเลขครุภัณฑ์" />
                           <StatusBadge
                             label={statusMeta?.label || asset.status}
                             className={statusMeta?.badgeClass}
                             dotClass={statusMeta?.dotClass}
+                            pulseDot={asset.status === 'under_maintenance'}
                           />
                         </div>
 
@@ -1446,7 +1464,7 @@ export function AssetRegistryPage() {
                         </Link>
                       </h3>
 
-                      {/* ข้อมูลยี่ห้อ/รุ่น และ Serial Number (S/N) ย้ายลงมาวางคู่กันอย่างชัดเจน */}
+                      {/* ข้อมูลยี่ห้อ/รุ่น และ Serial Number (S/N) ย้ายลงมาวางคู่กันอย่างชัดเจน พร้อมปุ่มคัดลอก */}
                       <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs">
                         <span className="inline-flex items-center gap-1.5 text-slate-700 font-medium">
                           <span className="text-slate-500 font-semibold">ยี่ห้อ/รุ่น:</span>
@@ -1457,9 +1475,10 @@ export function AssetRegistryPage() {
                         {asset.serial_number && (
                           <>
                             <span className="text-slate-300">•</span>
-                            <span className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/90 px-2.5 py-0.5 rounded-md">
+                            <span className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold text-slate-700 bg-slate-100 border border-slate-200/90 px-2.5 py-0.5 rounded-md">
                               <span className="text-slate-500 font-normal">S/N:</span>
                               <strong className="text-slate-900">{asset.serial_number}</strong>
+                              <CopyButton text={asset.serial_number} title="คัดลอก S/N" />
                             </span>
                           </>
                         )}
@@ -1517,9 +1536,19 @@ export function AssetRegistryPage() {
 
                       {/* ปุ่มการทำงานด่วน */}
                       <div className="inline-flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setQuickViewAsset(asset)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-gov-200 bg-gov-50/70 px-2.5 py-1.5 text-xs font-semibold text-gov-800 hover:bg-gov-100 hover:text-gov-900 transition btn-tactile"
+                          title="พรีวิวข้อมูลครุภัณฑ์ด่วน (Quick View Drawer)"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-gov-700" />
+                          <span>ดูด่วน</span>
+                        </button>
+
                         <Link
                           to={`/qr-barcode?assetId=${asset.id}`}
-                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-gov-700 transition"
+                          className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 hover:text-gov-700 transition btn-tactile"
                           title="พิมพ์ฉลาก QR / Barcode"
                         >
                           <QrCode className="h-3.5 w-3.5" />
@@ -2054,6 +2083,12 @@ export function AssetRegistryPage() {
           </div>
         )}
       </Modal>
+
+      {/* สไลด์ดูข้อมูลด่วน (Quick View Drawer) */}
+      <AssetQuickViewDrawer
+        asset={quickViewAsset}
+        onClose={() => setQuickViewAsset(null)}
+      />
     </div>
   );
 }

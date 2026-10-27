@@ -103,6 +103,37 @@ input[type='datetime-local']::-webkit-calendar-picker-indicator:hover {
   animation: modalFloatUp 0.34s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Skeleton Shimmer Effect in PANTONE Mist / Orchid Palette */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, #F3F1F8 0%, #E6E1F4 50%, #F3F1F8 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite ease-in-out;
+}
+
+/* Tactile Micro-Interactions */
+.btn-tactile {
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.btn-tactile:active {
+  transform: scale(0.97);
+}
+
+.card-interactive {
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease;
+}
+.card-interactive:hover {
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @media print {
   body {
     background: #ffffff !important;
